@@ -56,6 +56,34 @@ def is_javascript_file(url: str) -> bool:
     
     return False
 
+def is_map_file(url: str) -> bool:
+    """判断URL是否指向source map文件"""
+    from ..core.config import SUPPORTED_MAP_EXTENSIONS
+    
+    # 移除查询参数和片段
+    parsed = urlparse(url)
+    path = parsed.path.lower()
+    
+    # 检查文件扩展名
+    for ext in SUPPORTED_MAP_EXTENSIONS:
+        if path.endswith(ext):
+            return True
+    
+    return False
+
+def is_supported_file(url: str) -> bool:
+    """判断URL是否指向支持的文件类型（JS或MAP）"""
+    return is_javascript_file(url) or is_map_file(url)
+
+def get_file_type(url: str) -> str:
+    """获取文件类型"""
+    if is_javascript_file(url):
+        return 'js'
+    elif is_map_file(url):
+        return 'map'
+    else:
+        return 'unknown'
+
 def generate_file_path(url: str, target_url: str, file_type: str = "static") -> Path:
     """
     根据URL生成文件保存路径
@@ -103,6 +131,25 @@ def calculate_file_hash(file_path: Path) -> str:
     except Exception as e:
         logger.error(f"计算文件哈希失败 {file_path}: {e}")
         return ""
+
+def calculate_content_hash(content: bytes) -> str:
+    """计算内容MD5哈希值"""
+    try:
+        hash_md5 = hashlib.md5()
+        hash_md5.update(content)
+        return hash_md5.hexdigest()
+    except Exception as e:
+        logger.error(f"计算内容哈希失败: {e}")
+        return ""
+
+def is_duplicate_content(content: bytes, existing_hashes: set) -> bool:
+    """检查内容是否重复"""
+    content_hash = calculate_content_hash(content)
+    return content_hash in existing_hashes if content_hash else False
+
+def get_content_hash(content: bytes) -> str:
+    """获取内容哈希值（用于去重）"""
+    return calculate_content_hash(content)
 
 def detect_encoding(file_path: Path) -> str:
     """检测文件编码"""

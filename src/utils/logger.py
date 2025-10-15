@@ -40,7 +40,7 @@ def setup_logger(name="js_crawler"):
     
     # 控制台处理器
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(getattr(logging, LOG_LEVEL))  # 使用配置的日志级别
     console_formatter = ColoredFormatter(LOG_FORMAT)
     console_handler.setFormatter(console_formatter)
     

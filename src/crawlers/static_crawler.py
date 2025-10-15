@@ -21,7 +21,7 @@ from ..core.config import (
     USER_AGENT, MAX_FILE_SIZE, ORIGINAL_DIR, VERIFY_SSL, SSL_WARNINGS
 )
 from ..utils.utils import (
-    is_valid_url, normalize_url, is_javascript_file, 
+    is_valid_url, normalize_url, is_supported_file, 
     generate_file_path, convert_to_utf8
 )
 from ..utils.logger import get_logger
@@ -30,7 +30,7 @@ from ..utils.report_generator import CrawlReportGenerator
 logger = get_logger("static_crawler")
 
 class StaticJSCrawler:
-    """静态JavaScript文件爬取器"""
+    """静态JavaScript和Source Map文件爬取器"""
     
     def __init__(self, target_url: str = None, output_dir: Path = None):
         self.target_url = target_url
@@ -80,9 +80,9 @@ class StaticJSCrawler:
         
         return session
     
-    def discover_js_urls(self, url: str) -> Set[str]:
-        """发现页面中的JavaScript文件URL"""
-        js_urls = set()
+    def discover_files(self, url: str) -> Set[str]:
+        """发现页面中的JavaScript和Source Map文件URL"""
+        file_urls = set()
         
         try:
             logger.info(f"正在分析页面: {url}")
@@ -98,8 +98,8 @@ class StaticJSCrawler:
                 src = script.get('src')
                 if src:
                     full_url = normalize_url(url, src)
-                    if is_javascript_file(full_url):
-                        js_urls.add(full_url)
+                    if is_supported_file(full_url):
+                        file_urls.add(full_url)
                         self.add_to_download_queue(full_url)  # 立即添加到下载队列
                         logger.debug(f"发现JS文件: {full_url}")
             
@@ -107,32 +107,35 @@ class StaticJSCrawler:
             link_tags = soup.find_all('link', rel='modulepreload')
             for link in link_tags:
                 href = link.get('href')
-                if href and is_javascript_file(href):
+                if href and is_supported_file(href):
                     full_url = normalize_url(url, href)
-                    js_urls.add(full_url)
+                    file_urls.add(full_url)
                     self.add_to_download_queue(full_url)  # 立即添加到下载队列
                     logger.debug(f"发现JS模块: {full_url}")
             
-            # 在HTML内容中搜索JavaScript文件引用
-            js_patterns = [
+            # 在HTML内容中搜索JavaScript和Source Map文件引用
+            file_patterns = [
                 r'["\']([^"\']*\.js(?:\?[^"\']*)?)["\']',
                 r'["\']([^"\']*\.mjs(?:\?[^"\']*)?)["\']',
+                r'["\']([^"\']*\.js\.map(?:\?[^"\']*)?)["\']',
+                r'["\']([^"\']*\.map(?:\?[^"\']*)?)["\']',
                 r'import\s+.*?from\s+["\']([^"\']+)["\']',
                 r'require\s*\(\s*["\']([^"\']+)["\']',
+                r'sourceMappingURL=([^\s]+)',
             ]
             
             content = response.text
-            for pattern in js_patterns:
+            for pattern in file_patterns:
                 matches = re.findall(pattern, content, re.IGNORECASE)
                 for match in matches:
-                    if is_javascript_file(match):
+                    if is_supported_file(match):
                         full_url = normalize_url(url, match)
                         if is_valid_url(full_url):
-                            js_urls.add(full_url)
+                            file_urls.add(full_url)
                             self.add_to_download_queue(full_url)  # 立即添加到下载队列
-                            logger.debug(f"通过正则发现JS文件: {full_url}")
+                            logger.debug(f"通过正则发现文件: {full_url}")
             
-            logger.info(f"在页面 {url} 中发现 {len(js_urls)} 个JavaScript文件")
+            logger.info(f"在页面 {url} 中发现 {len(file_urls)} 个JS/MAP文件")
             
         except requests.exceptions.HTTPError as e:
             status_code = e.response.status_code if e.response else 0
@@ -151,8 +154,8 @@ class StaticJSCrawler:
         
         return js_urls
     
-    def download_js_file(self, url: str) -> bool:
-        """下载单个JavaScript文件"""
+    def download_file(self, url: str) -> bool:
+        """下载单个JavaScript或Source Map文件"""
         start_time = time.time()
         try:
             logger.info(f"正在下载: {url}")
@@ -180,11 +183,18 @@ class StaticJSCrawler:
             response = self.session.get(url, timeout=REQUEST_TIMEOUT)
             response.raise_for_status()
             
-            # 检查Content-Type
+            # 检查Content-Type（对于.map文件更宽松的检查）
             content_type = response.headers.get('content-type', '').lower()
-            if 'javascript' not in content_type and 'text' not in content_type:
-                logger.warning(f"可能不是JavaScript文件: {url} (Content-Type: {content_type})")
-                self.report_generator.add_log(f"警告: 可能不是JavaScript文件: {url} (Content-Type: {content_type})", "WARNING")
+            if url.endswith('.map') or url.endswith('.js.map'):
+                # Source Map文件通常是application/json或text/plain
+                if 'json' not in content_type and 'text' not in content_type and 'javascript' not in content_type:
+                    logger.warning(f"可能不是Source Map文件: {url} (Content-Type: {content_type})")
+                    self.report_generator.add_log(f"警告: 可能不是Source Map文件: {url} (Content-Type: {content_type})", "WARNING")
+            else:
+                # JavaScript文件的检查
+                if 'javascript' not in content_type and 'text' not in content_type:
+                    logger.warning(f"可能不是JavaScript文件: {url} (Content-Type: {content_type})")
+                    self.report_generator.add_log(f"警告: 可能不是JavaScript文件: {url} (Content-Type: {content_type})", "WARNING")
             
             # 生成本地文件路径
             file_path = generate_file_path(url, self.target_url, 'static')
@@ -232,7 +242,7 @@ class StaticJSCrawler:
     
     def _download_worker(self, url: str) -> Dict[str, Any]:
         """下载工作线程"""
-        success = self.download_js_file(url)
+        success = self.download_file(url)
         return {'url': url, 'success': success}
     
     def start_concurrent_downloads(self, max_workers: int = 4):
@@ -270,9 +280,9 @@ class StaticJSCrawler:
         }
         
         try:
-            # 发现当前页面的JavaScript文件
-            js_urls = self.discover_js_urls(current_url)
-            result['js_urls'] = js_urls
+            # 发现当前页面的JavaScript和Source Map文件
+            file_urls = self.discover_files(current_url)
+            result['js_urls'] = file_urls
             result['success'] = True
             
             # 如果深度允许，发现更多页面

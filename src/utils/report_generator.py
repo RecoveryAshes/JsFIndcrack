@@ -74,6 +74,25 @@ class CrawlReportGenerator:
         # 计算总下载大小
         total_size = sum(file_info.get('size', 0) for file_info in self.success_files)
         
+        # 统计JS和MAP文件
+        js_files = 0
+        map_files = 0
+        js_size = 0
+        map_size = 0
+        
+        for file_info in self.success_files:
+            file_path = file_info.get('file_path', '')
+            url = file_info.get('url', '')
+            size = file_info.get('size', 0)
+            
+            if file_path:
+                if file_path.lower().endswith('.js'):
+                    js_files += 1
+                    js_size += size
+                elif file_path.lower().endswith('.map') or url.endswith('.js.map'):
+                    map_files += 1
+                    map_size += size
+        
         return {
             'crawl_summary': {
                 'start_time': self.start_time.isoformat(),
@@ -85,7 +104,13 @@ class CrawlReportGenerator:
                 'success_rate_percent': round(success_rate, 2),
                 'total_size_bytes': total_size,
                 'total_size_mb': round(total_size / (1024 * 1024), 2),
-                'target_directory': str(self.target_dir)
+                'target_directory': str(self.target_dir),
+                'javascript_files': js_files,
+                'sourcemap_files': map_files,
+                'javascript_size_bytes': js_size,
+                'sourcemap_size_bytes': map_size,
+                'javascript_size_mb': round(js_size / (1024 * 1024), 2),
+                'sourcemap_size_mb': round(map_size / (1024 * 1024), 2)
             }
         }
         
@@ -104,12 +129,36 @@ class CrawlReportGenerator:
     def _get_file_types_summary(self) -> Dict[str, int]:
         """获取文件类型统计"""
         file_types = {}
+        detailed_types = {}
+        
         for file_info in self.success_files:
             file_path = file_info.get('file_path', '')
+            url = file_info.get('url', '')
+            
             if file_path:
                 ext = Path(file_path).suffix.lower()
                 file_types[ext] = file_types.get(ext, 0) + 1
-        return file_types
+                
+                # 详细分类
+                if ext == '.js':
+                    if '.min.js' in file_path.lower():
+                        detailed_types['JavaScript (Minified)'] = detailed_types.get('JavaScript (Minified)', 0) + 1
+                    else:
+                        detailed_types['JavaScript (Regular)'] = detailed_types.get('JavaScript (Regular)', 0) + 1
+                elif ext == '.map':
+                    detailed_types['Source Map'] = detailed_types.get('Source Map', 0) + 1
+                elif url.endswith('.js.map'):
+                    # 处理没有扩展名但URL表明是source map的情况
+                    detailed_types['Source Map'] = detailed_types.get('Source Map', 0) + 1
+                    file_types['.map'] = file_types.get('.map', 0) + 1
+                else:
+                    detailed_types[f'Other ({ext})'] = detailed_types.get(f'Other ({ext})', 0) + 1
+        
+        # 返回包含基本扩展名统计和详细分类的结果
+        return {
+            'by_extension': file_types,
+            'by_type': detailed_types
+        }
         
     def _get_error_summary(self) -> Dict[str, int]:
         """获取错误类型统计"""
@@ -196,5 +245,10 @@ class CrawlReportGenerator:
         print(f"失败下载: {summary['failed_downloads']}")
         print(f"成功率: {summary['success_rate_percent']}%")
         print(f"总下载大小: {summary['total_size_mb']} MB")
+        print("")
+        print("文件类型统计:")
+        print(f"  JavaScript文件: {summary['javascript_files']} 个 ({summary['javascript_size_mb']} MB)")
+        print(f"  Source Map文件: {summary['sourcemap_files']} 个 ({summary['sourcemap_size_mb']} MB)")
+        print("")
         print(f"目标目录: {summary['target_directory']}")
         print("="*60)

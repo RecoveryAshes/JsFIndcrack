@@ -43,11 +43,13 @@ USE_EMBEDDED_BROWSER = True  # 是否使用内置浏览器
 
 # 文件处理配置
 SUPPORTED_JS_EXTENSIONS = ['.js', '.mjs', '.jsx']
+SUPPORTED_MAP_EXTENSIONS = ['.map', '.js.map']  # 支持的source map文件扩展名
+SUPPORTED_FILE_EXTENSIONS = SUPPORTED_JS_EXTENSIONS + SUPPORTED_MAP_EXTENSIONS  # 所有支持的文件扩展名
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 ENCODING = 'utf-8'
 
 # 日志配置
-LOG_LEVEL = "DEBUG"
+LOG_LEVEL = "INFO"
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 LOG_FILE = LOGS_DIR / "js_crawler.log"
 

@@ -13,7 +13,7 @@ from ..utils.logger import setup_logger, get_logger
 from ..crawlers.static_crawler import StaticJSCrawler
 from ..crawlers.dynamic_crawler import DynamicJSCrawler
 from .deobfuscator import JSDeobfuscator
-from ..utils.utils import save_checkpoint, load_checkpoint, format_file_size
+from ..utils.utils import save_checkpoint, load_checkpoint, format_file_size, calculate_file_hash
 
 # 根据配置选择浏览器引擎
 if USE_EMBEDDED_BROWSER and BROWSER_ENGINE == "playwright":
@@ -40,13 +40,17 @@ class JSCrawler:
         self.output_dir = self.dirs['target_output_dir']  # 添加output_dir属性
         self.manager = JSCrawlerManager(target_url)
     
-    def crawl(self, depth: int = 2, wait_time: int = 3, max_workers: int = 2, resume: bool = False) -> Dict[str, Any]:
+    def crawl(self, depth: int = 2, wait_time: int = 3, max_workers: int = 2, playwright_tabs: int = 4, 
+              headless: bool = True, mode: str = 'all', resume: bool = False) -> Dict[str, Any]:
         """执行爬取操作"""
         return self.manager.run(
             url=self.target_url,
             max_depth=depth,
             wait_time=wait_time,
             max_workers=max_workers,
+            playwright_tabs=playwright_tabs,
+            headless=headless,
+            mode=mode,
             resume=resume
         )
 
@@ -112,6 +116,23 @@ class JSCrawlerManager:
         
         return any(indicator in error_str for indicator in anti_crawler_indicators)
     
+    def _collect_downloaded_file_hashes(self) -> Dict[str, str]:
+        """收集已下载文件的哈希值，用于跨模式去重"""
+        file_hashes = {}
+        original_dir = self.dirs['original_dir']
+        
+        if original_dir.exists():
+            for js_file in original_dir.rglob('*.js'):
+                try:
+                    file_hash = calculate_file_hash(js_file)
+                    file_hashes[file_hash] = str(js_file.name)
+                    logger.debug(f"收集文件哈希: {js_file.name} -> {file_hash}")
+                except Exception as e:
+                    logger.warning(f"计算文件哈希失败 {js_file}: {e}")
+        
+        logger.info(f"收集到 {len(file_hashes)} 个已下载文件的哈希值")
+        return file_hashes
+    
     def crawl_static_js(self, url: str, max_depth: int = 2, max_workers: int = 4, resume: bool = False) -> Dict[str, Any]:
         """爬取静态JavaScript文件"""
         logger.info("=" * 60)
@@ -172,7 +193,7 @@ class JSCrawlerManager:
                 'failed_files': []
             }
     
-    def crawl_dynamic_js(self, url: str, wait_time: int = 10, resume: bool = False) -> Dict[str, Any]:
+    def crawl_dynamic_js(self, url: str, wait_time: int = 10, playwright_tabs: int = 4, headless: bool = True, resume: bool = False) -> Dict[str, Any]:
         """爬取动态JavaScript文件"""
         logger.info("=" * 60)
         logger.info("开始动态JavaScript文件爬取")
@@ -184,11 +205,16 @@ class JSCrawlerManager:
                 logger.info("动态爬取已完成，跳过此步骤")
                 return self.checkpoint_data.get('dynamic_results', {})
             
+            # 收集已下载文件的哈希值，用于跨模式去重
+            existing_file_hashes = self._collect_downloaded_file_hashes()
+            
             # 根据配置选择爬取方式
             if USE_EMBEDDED_BROWSER and PLAYWRIGHT_AVAILABLE:
-                results = self._crawl_with_playwright(url, wait_time)
+                logger.info(f"使用Playwright进行动态爬取，最大标签页数: {playwright_tabs}，无头模式: {headless}")
+                results = self._crawl_with_playwright(url, wait_time, playwright_tabs, headless, existing_file_hashes)
             else:
                 # 使用传统Selenium方式
+                logger.info("使用传统Selenium进行动态爬取")
                 results = self.dynamic_crawler.crawl_dynamic_js(url, wait_time)
             
             # 保存检查点
@@ -203,6 +229,19 @@ class JSCrawlerManager:
             logger.info(f"  - 成功下载: {results['successful_downloads']}")
             logger.info(f"  - 失败下载: {results['failed_downloads']}")
             
+            duplicated_files = results.get('duplicated_files', 0)
+            cross_mode_duplicated = results.get('cross_mode_duplicated_files', 0)
+            total_duplicated = duplicated_files + cross_mode_duplicated
+            
+            if total_duplicated > 0:
+                logger.info(f"  - 重复文件: {total_duplicated} (已跳过)")
+                if cross_mode_duplicated > 0:
+                    logger.info(f"    - 模式内去重: {duplicated_files}")
+                    logger.info(f"    - 跨模式去重: {cross_mode_duplicated}")
+                    logger.info(f"  - 去重效果: 节省了 {total_duplicated} 个重复文件的下载 (其中 {cross_mode_duplicated} 个为跨模式去重)")
+                else:
+                    logger.info(f"  - 去重效果: 节省了 {total_duplicated} 个重复文件的下载")
+            
             return results
             
         except Exception as e:
@@ -215,7 +254,7 @@ class JSCrawlerManager:
                 'failed_files': []
             }
     
-    def _crawl_with_playwright(self, url: str, wait_time: int = 10) -> Dict[str, Any]:
+    def _crawl_with_playwright(self, url: str, wait_time: int = 10, playwright_tabs: int = 4, headless: bool = True, existing_file_hashes: Dict[str, str] = None) -> Dict[str, Any]:
         """使用Playwright进行动态爬取"""
         import asyncio
         from .config import PLAYWRIGHT_BROWSER
@@ -225,13 +264,18 @@ class JSCrawlerManager:
                 target_url=url,
                 max_depth=2, 
                 wait_time=wait_time,
-                browser_type=PLAYWRIGHT_BROWSER
+                max_workers=playwright_tabs,  # 传递Playwright标签页数量控制参数
+                browser_type=PLAYWRIGHT_BROWSER,
+                headless=headless,  # 传递无头模式参数
+                existing_file_hashes=existing_file_hashes  # 传递已有文件哈希
             ) as crawler:
                 stats = await crawler.crawl_website(url, self.dirs['original_dir'])
                 return {
                     'total_discovered': stats['js_files_found'],
                     'successful_downloads': stats['js_files_downloaded'],
                     'failed_downloads': stats['js_files_failed'],
+                    'duplicated_files': stats.get('duplicated_files', 0),
+                    'cross_mode_duplicated_files': stats.get('cross_mode_duplicated_files', 0),
                     'downloaded_files': [],  # Playwright处理文件列表的方式不同
                     'failed_files': [],
                     'total_size': stats['total_size']
@@ -288,9 +332,9 @@ class JSCrawlerManager:
         total_time = end_time - self.start_time
         
         # 计算总体统计
-        total_discovered = static_results['total_discovered'] + dynamic_results['total_discovered']
-        total_downloaded = static_results['successful_downloads'] + dynamic_results['successful_downloads']
-        total_failed = static_results['failed_downloads'] + dynamic_results['failed_downloads']
+        total_discovered = static_results.get('total_discovered', 0) + dynamic_results.get('total_discovered', 0)
+        total_downloaded = static_results.get('successful_downloads', 0) + dynamic_results.get('successful_downloads', 0)
+        total_failed = static_results.get('failed_downloads', 0) + dynamic_results.get('failed_downloads', 0)
         
         # 计算文件大小
         static_files = static_results.get('downloaded_files', [])
@@ -319,15 +363,15 @@ class JSCrawlerManager:
                 'total_size': format_file_size(total_size)
             },
             'static_crawling': {
-                'discovered': static_results['total_discovered'],
-                'downloaded': static_results['successful_downloads'],
-                'failed': static_results['failed_downloads'],
+                'discovered': static_results.get('total_discovered', 0),
+                'downloaded': static_results.get('successful_downloads', 0),
+                'failed': static_results.get('failed_downloads', 0),
                 'pages_visited': static_results.get('visited_pages', 0)
             },
             'dynamic_crawling': {
-                'discovered': dynamic_results['total_discovered'],
-                'downloaded': dynamic_results['successful_downloads'],
-                'failed': dynamic_results['failed_downloads']
+                'discovered': dynamic_results.get('total_discovered', 0),
+                'downloaded': dynamic_results.get('successful_downloads', 0),
+                'failed': dynamic_results.get('failed_downloads', 0)
             },
             'deobfuscation': {
                 'total_files': deob_total['total_files'],
@@ -388,13 +432,17 @@ class JSCrawlerManager:
             logger.error(f"整合详细报告失败: {e}")
     
     def run(self, url: str, max_depth: int = 2, wait_time: int = 10, 
-            max_workers: int = 4, resume: bool = False) -> Dict[str, Any]:
+            max_workers: int = 4, playwright_tabs: int = 4, headless: bool = True, 
+            mode: str = 'all', resume: bool = False) -> Dict[str, Any]:
         """运行完整的爬取和反混淆流程"""
         logger.info("JavaScript文件爬取和反混淆工具启动")
         logger.info(f"目标URL: {url}")
         logger.info(f"最大深度: {max_depth}")
         logger.info(f"动态等待时间: {wait_time}秒")
         logger.info(f"并行工作线程: {max_workers}")
+        logger.info(f"Playwright标签页数: {playwright_tabs}")
+        logger.info(f"无头模式: {headless}")
+        logger.info(f"爬取模式: {mode}")
         
         try:
             # 确保目录存在
@@ -406,25 +454,35 @@ class JSCrawlerManager:
                 if checkpoint:
                     self.checkpoint_data = checkpoint
             
-            # 步骤1: 静态爬取
-            static_results = self.crawl_static_js(url, max_depth, max_workers, resume)
+            static_results = {}
+            dynamic_results = {}
             
-            # 检查静态爬取是否因反爬虫机制失败
-            static_failed_anti_crawler = (
-                'static_failed_anti_crawler' in self.checkpoint_data or
-                self._is_anti_crawler_detected(static_results)
-            )
+            # 根据模式选择执行的爬取类型
+            if mode in ['static', 'all']:
+                # 步骤1: 静态爬取
+                static_results = self.crawl_static_js(url, max_depth, max_workers, resume)
             
-            # 步骤2: 动态爬取
-            # 如果静态爬取失败，强制执行动态爬取
-            if static_failed_anti_crawler:
-                logger.info("由于检测到反爬虫机制，将强制执行动态爬取")
-                dynamic_results = self.crawl_dynamic_js(url, wait_time, resume=False)  # 不跳过动态爬取
-            else:
-                dynamic_results = self.crawl_dynamic_js(url, wait_time, resume)
+            if mode in ['dynamic', 'all']:
+                # 检查静态爬取是否因反爬虫机制失败（仅在全模式下检查）
+                static_failed_anti_crawler = False
+                if mode == 'all':
+                    static_failed_anti_crawler = (
+                        'static_failed_anti_crawler' in self.checkpoint_data or
+                        self._is_anti_crawler_detected(static_results)
+                    )
+                
+                # 步骤2: 动态爬取
+                # 如果静态爬取失败，强制执行动态爬取
+                if static_failed_anti_crawler:
+                    logger.info("由于检测到反爬虫机制，将强制执行动态爬取")
+                    dynamic_results = self.crawl_dynamic_js(url, wait_time, playwright_tabs, headless, resume=False)  # 不跳过动态爬取
+                else:
+                    dynamic_results = self.crawl_dynamic_js(url, wait_time, playwright_tabs, headless, resume)
             
-            # 步骤3: 反混淆
-            deobfuscation_results = self.deobfuscate_files(max_workers, resume)
+            # 步骤3: 反混淆（如果有文件需要处理）
+            deobfuscation_results = {}
+            if static_results or dynamic_results:
+                deobfuscation_results = self.deobfuscate_files(max_workers, resume)
             
             # 生成最终报告
             final_report = self.generate_final_report(
@@ -512,7 +570,12 @@ def main():
     parser.add_argument('url', help='目标网站URL')
     parser.add_argument('-d', '--depth', type=int, default=2, help='爬取深度 (默认: 2)')
     parser.add_argument('-w', '--wait', type=int, default=3, help='页面等待时间(秒) (默认: 3)')
-    parser.add_argument('-t', '--threads', type=int, default=2, help='并行线程数 (默认: 2)')
+    parser.add_argument('-t', '--threads', type=int, default=2, help='静态爬取并行线程数 (默认: 2)')
+    parser.add_argument('--playwright-tabs', type=int, default=4, help='Playwright同时打开的标签页数量 (默认: 4)')
+    parser.add_argument('--headless', action='store_true', default=True, help='Playwright无头模式运行 (默认: True)')
+    parser.add_argument('--no-headless', dest='headless', action='store_false', help='Playwright有头模式运行')
+    parser.add_argument('--mode', choices=['static', 'dynamic', 'all'], default='all', 
+                       help='爬取模式: static(仅静态), dynamic(仅动态), all(全部) (默认: all)')
     parser.add_argument('-r', '--resume', action='store_true', help='从检查点恢复')
     
     args = parser.parse_args()
@@ -529,15 +592,18 @@ def main():
             depth=args.depth,
             wait_time=args.wait,
             max_workers=args.threads,
+            playwright_tabs=getattr(args, 'playwright_tabs'),
+            headless=args.headless,
+            mode=args.mode,
             resume=args.resume
         )
         
         # 输出结果
         if result.get('success'):
-            print(f"\n✅ 爬取完成！总共处理了 {result.get('total_files', 0)} 个文件")
+            print(f"\n爬取完成！总共处理了 {result.get('total_files', 0)} 个文件")
             print(f"📁 输出目录: {result.get('output_dir', crawler.dirs['target_output_dir'])}")
         else:
-            print(f"\n❌ 爬取失败: {result.get('error', '未知错误')}")
+            print(f"\n爬取失败: {result.get('error', '未知错误')}")
             sys.exit(1)
     except Exception as e:
         logger.error(f"程序执行失败: {e}")

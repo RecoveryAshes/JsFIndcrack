@@ -21,7 +21,7 @@ from ..core.config import (
     USER_AGENT, ORIGINAL_DIR, MAX_FILE_SIZE, VERIFY_SSL
 )
 from ..utils.utils import (
-    is_valid_url, normalize_url, is_javascript_file,
+    is_valid_url, normalize_url, is_supported_file,
     generate_file_path, format_file_size, convert_to_utf8
 )
 from ..utils.logger import get_logger
@@ -30,7 +30,7 @@ from ..utils.report_generator import CrawlReportGenerator
 logger = get_logger("dynamic_crawler")
 
 class DynamicJSCrawler:
-    """动态JavaScript文件捕获器"""
+    """动态JavaScript和Source Map文件捕获器"""
     
     def __init__(self, target_url: str = None, output_dir: Path = None):
         self.target_url = target_url
@@ -87,11 +87,11 @@ class DynamicJSCrawler:
             driver.execute_cdp_cmd('Network.enable', {})
             driver.execute_cdp_cmd('Runtime.enable', {})
             
-            logger.info("✅ 系统ChromeDriver初始化成功")
+            logger.info("系统ChromeDriver初始化成功")
             return driver
             
         except Exception as e:
-            logger.warning(f"❌ 系统ChromeDriver失败: {e}")
+            logger.warning(f"系统ChromeDriver失败: {e}")
             if driver:
                 try:
                     driver.quit()
@@ -129,11 +129,11 @@ class DynamicJSCrawler:
             driver.execute_cdp_cmd('Network.enable', {})
             driver.execute_cdp_cmd('Runtime.enable', {})
             
-            logger.info("✅ webdriver-manager ChromeDriver初始化成功")
+            logger.info("webdriver-manager ChromeDriver初始化成功")
             return driver
             
         except Exception as e:
-            logger.warning(f"❌ webdriver-manager失败: {e}")
+            logger.warning(f"webdriver-manager失败: {e}")
             if driver:
                 try:
                     driver.quit()
@@ -153,11 +153,11 @@ class DynamicJSCrawler:
             driver.execute_cdp_cmd('Network.enable', {})
             driver.execute_cdp_cmd('Runtime.enable', {})
             
-            logger.info("✅ Selenium Manager ChromeDriver初始化成功")
+            logger.info("Selenium Manager ChromeDriver初始化成功")
             return driver
             
         except Exception as e:
-            logger.warning(f"❌ Selenium Manager失败: {e}")
+            logger.warning(f"Selenium Manager失败: {e}")
             if driver:
                 try:
                     driver.quit()
@@ -192,21 +192,21 @@ class DynamicJSCrawler:
                     url = response['url']
                     mime_type = response.get('mimeType', '')
                     
-                    # 检查是否为JavaScript文件
-                    if (is_javascript_file(url) or 
+                    # 检查是否为支持的文件类型
+                    if (is_supported_file(url) or 
                         'javascript' in mime_type.lower() or
                         'application/javascript' in mime_type.lower() or
                         'text/javascript' in mime_type.lower()):
                         js_urls.add(url)
-                        logger.debug(f"从网络日志发现JS文件: {url}")
+                        logger.debug(f"从网络日志发现文件: {url}")
                 
                 elif message['message']['method'] == 'Network.requestWillBeSent':
                     request = message['message']['params']['request']
                     url = request['url']
                     
-                    if is_javascript_file(url):
+                    if is_supported_file(url):
                         js_urls.add(url)
-                        logger.debug(f"从请求日志发现JS文件: {url}")
+                        logger.debug(f"从请求日志发现文件: {url}")
         
         except Exception as e:
             logger.error(f"从日志提取JS文件失败: {e}")
@@ -277,9 +277,9 @@ class DynamicJSCrawler:
             
             for request in captured:
                 url = request.get('url')
-                if url and is_javascript_file(url):
+                if url and is_supported_file(url):
                     js_urls.add(url)
-                    logger.debug(f"从XHR/Fetch捕获JS文件: {url}")
+                    logger.debug(f"从XHR/Fetch捕获文件: {url}")
         
         except Exception as e:
             logger.error(f"捕获XHR请求失败: {e}")
@@ -330,12 +330,12 @@ class DynamicJSCrawler:
         except Exception as e:
             logger.error(f"触发动态内容失败: {e}")
     
-    def _download_js_file(self, url: str) -> bool:
-        """下载JavaScript文件"""
+    def _download_file(self, url: str) -> bool:
+        """下载JavaScript和Source Map文件"""
         start_time = time.time()
         try:
-            logger.info(f"正在下载动态JS文件: {url}")
-            self.report_generator.add_log(f"开始下载动态JS文件: {url}")
+            logger.info(f"正在下载动态文件: {url}")
+            self.report_generator.add_log(f"开始下载动态文件: {url}")
             
             # 使用requests下载文件
             session = requests.Session()
@@ -348,7 +348,7 @@ class DynamicJSCrawler:
                 content_length = head_response.headers.get('content-length')
                 if content_length and int(content_length) > MAX_FILE_SIZE:
                     error_msg = f'文件过大 ({content_length} bytes)'
-                    logger.warning(f"动态JS文件过大，跳过: {url}")
+                    logger.warning(f"动态文件过大，跳过: {url}")
                     
                     # 记录失败信息
                     failed_info = {
@@ -395,13 +395,13 @@ class DynamicJSCrawler:
             self.downloaded_files.append(file_info)
             self.report_generator.add_success_file(file_info)
             
-            logger.info(f"动态JS文件下载成功: {url} -> {file_path}")
+            logger.info(f"动态文件下载成功: {url} -> {file_path}")
             return True
             
         except Exception as e:
             download_time = time.time() - start_time
             error_msg = str(e)
-            logger.error(f"下载动态JS文件失败 {url}: {error_msg}")
+            logger.error(f"下载动态文件失败 {url}: {error_msg}")
             
             # 记录失败信息
             failed_info = {
@@ -448,12 +448,12 @@ class DynamicJSCrawler:
             xhr_js = self._capture_xhr_requests()
             self.js_urls.update(xhr_js)
             
-            logger.info(f"发现 {len(self.js_urls)} 个动态JavaScript文件")
+            logger.info(f"发现 {len(self.js_urls)} 个动态文件")
             
-            # 下载所有发现的JS文件
-            with tqdm(total=len(self.js_urls), desc="下载动态JS文件", unit="文件") as pbar:
+            # 下载所有发现的文件
+            with tqdm(total=len(self.js_urls), desc="下载动态文件", unit="文件") as pbar:
                 for js_url in self.js_urls:
-                    success = self._download_js_file(js_url)
+                    success = self._download_file(js_url)
                     pbar.set_postfix({
                         '成功': len(self.downloaded_files),
                         '失败': len(self.failed_downloads)
@@ -462,7 +462,7 @@ class DynamicJSCrawler:
                     time.sleep(1)  # 避免请求过快
             
             # 生成并保存报告
-            self.report_generator.add_log(f"动态爬取完成，发现 {len(self.js_urls)} 个JS文件，成功下载 {len(self.downloaded_files)} 个")
+            self.report_generator.add_log(f"动态爬取完成，发现 {len(self.js_urls)} 个文件，成功下载 {len(self.downloaded_files)} 个")
             self.report_generator.save_all_reports()
             
             # 打印报告摘要
