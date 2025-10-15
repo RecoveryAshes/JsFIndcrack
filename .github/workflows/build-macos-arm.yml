@@ -152,3 +152,61 @@ jobs:
           output/*/detailed_log.txt
           *.log
         retention-days: 14
+        
+    - name: Generate release tag
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      id: tag
+      run: |
+        # 生成基于时间戳的版本号
+        VERSION="v$(date +'%Y.%m.%d')-$(date +'%H%M')"
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Generated version: $VERSION"
+        
+    - name: Create GitHub Release
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.tag.outputs.version }}
+        name: "JSFindCrack macOS ARM64 ${{ steps.tag.outputs.version }}"
+        body: |
+          ## JSFindCrack macOS ARM64 独立可执行文件
+          
+          ### 🚀 新功能
+          - 支持 macOS ARM64 (Apple Silicon) 架构
+          - 独立可执行文件，无需安装 Python 环境
+          - 包含完整的依赖和浏览器支持
+          
+          ### 📦 包含文件
+          - `jsfindcrack-macos-arm64.tar.gz` - 完整发布包（包含可执行文件、文档和使用说明）
+          - `jsfindcrack-macos-arm64` - 独立可执行文件
+          
+          ### 🔧 使用方法
+          1. 下载 `jsfindcrack-macos-arm64.tar.gz`
+          2. 解压：`tar -xzf jsfindcrack-macos-arm64.tar.gz`
+          3. 运行：`./jsfindcrack-macos-arm64 -u <目标URL> [参数]`
+          
+          ### 📋 系统要求
+          - macOS 11.0+ (Big Sur 或更新版本)
+          - Apple Silicon (M1/M2/M3) 或 Intel 处理器
+          - 已安装 Google Chrome 浏览器
+          
+          ### 🐛 修复内容
+          - 修复了循环导入问题
+          - 优化了依赖管理
+          - 改进了构建流程
+          
+          ---
+          
+          **构建信息**
+          - 构建时间: ${{ github.event.head_commit.timestamp }}
+          - 提交哈希: ${{ github.sha }}
+          - Python 版本: 3.11
+          - 架构: ARM64
+        files: |
+          jsfindcrack-macos-arm64.tar.gz
+          dist/jsfindcrack-macos-arm64
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
