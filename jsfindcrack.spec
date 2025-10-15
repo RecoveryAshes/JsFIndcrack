@@ -3,6 +3,31 @@ import os
 import sys
 from pathlib import Path
 
+# 处理macOS系统模块的条件导入
+def get_macos_hidden_imports():
+    """获取macOS系统相关的隐藏导入模块"""
+    macos_imports = []
+    
+    # 检查是否为macOS系统
+    if sys.platform == 'darwin':
+        # 尝试导入macOS特有模块
+        try_imports = [
+            '_scproxy',
+            'Foundation', 
+            'CoreFoundation',
+            'SystemConfiguration',
+        ]
+        
+        for module in try_imports:
+            try:
+                __import__(module)
+                macos_imports.append(module)
+                print(f"添加macOS模块: {module}")
+            except ImportError:
+                print(f"跳过不可用的模块: {module}")
+    
+    return macos_imports
+
 # 获取Playwright浏览器路径
 def get_playwright_browser_paths():
     """获取Playwright浏览器的安装路径"""
@@ -58,6 +83,9 @@ def filter_binaries(binaries):
             print(f"跳过浏览器二进制文件: {binary[0]}")
     return filtered
 
+# 获取macOS系统模块
+macos_imports = get_macos_hidden_imports()
+
 # 隐藏导入
 hiddenimports = [
     'selenium',
@@ -79,7 +107,12 @@ hiddenimports = [
     'logging',
     'tqdm',
     'tqdm.asyncio',
-]
+    # 其他可能需要的系统模块
+    'ssl',
+    'socket',
+    'urllib.request',
+    'http.cookiejar',
+] + macos_imports  # 添加macOS系统模块
 
 block_cipher = None
 
