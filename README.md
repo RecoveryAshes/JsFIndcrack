@@ -5,7 +5,7 @@
 
 一个功能强大的JavaScript文件爬取和反混淆工具，支持静态和动态爬取，具备断点续爬、并发处理和智能反混淆等高级功能。
 
-## ✨主要特性
+## 主要特性
 
 - 🕷️ **多模式爬取**: 支持静态HTML解析和动态JavaScript执行两种爬取模式
 -**Source Map支持**: 自动识别和下载JavaScript Source Map文件(.map, .js.map)
@@ -17,7 +17,7 @@
 - **反爬虫检测**: 智能识别反爬虫机制并自动切换策略
 -**多浏览器支持**: 支持Selenium和Playwright两种浏览器引擎
 
-##快速开始
+## 快速开始
 
 ### 安装依赖
 
@@ -86,7 +86,7 @@ JsFIndcrack/
                 # 文档目录
 ```
 
-## 🔧 命令行参数
+##  命令行参数
 
 | 参数 | 简写 | 默认值 | 说明 |
 |------|------|--------|------|
@@ -100,7 +100,7 @@ JsFIndcrack/
 | `--mode` | - | all | 爬取模式: static/dynamic/all |
 | `--resume` | `-r` | - | 从检查点恢复 |
 
-## 💻 接口
+##  接口
 
 ### 基本用法
 
@@ -203,7 +203,7 @@ output/
         └── crawl_report.json
 ```
 
-## ⚙️ 配置说明
+##  配置说明
 
 主要配置项位于 `src/core/config.py`：
 
@@ -222,37 +222,6 @@ SUPPORTED_JS_EXTENSIONS = ['.js', '.mjs', '.jsx']
 SUPPORTED_MAP_EXTENSIONS = ['.map', '.js.map']
 ```
 
-## 🐛 故障排除
-
-### 常见问题
-
-1. **webcrack未找到**
-   ```bash
-   npm install -g webcrack
-   # 或设置WEBCRACK_COMMAND环境变量
-   export WEBCRACK_COMMAND=/path/to/webcrack
-   ```
-
-2. **浏览器驱动问题**
-   ```bash
-   # Playwright
-   playwright install
-   
-   # Selenium会自动下载驱动
-   # 如有问题，请检查网络连接
-   ```
-
-3. **权限错误**
-   ```bash
-   chmod +x install.sh
-   # 确保有写入输出目录的权限
-   ```
-
-4. **内存不足**
-   - 减少并发工作线程数 (`--threads`)
-   - 减少Playwright标签页数 (`--playwright-tabs`)
-   - 设置更小的MAX_FILE_SIZE
-
 ### 调试模式
 
 ```bash
@@ -264,13 +233,6 @@ python main.py https://example.com
 tail -f output/example.com/logs/crawler.log
 ```
 
-## 🤝 贡献指南
-
-1. Fork 项目
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
 
 ##许可证
 
