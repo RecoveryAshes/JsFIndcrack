@@ -36,14 +36,27 @@ datas = [
     ('src', 'src'),  # 包含源代码
 ]
 
-# 添加浏览器文件到数据文件中
+# 添加浏览器文件到数据文件中（作为数据文件处理，避免代码签名问题）
 for browser_path, target_path in browser_paths:
     if os.path.exists(browser_path):
+        # 将整个浏览器目录作为数据文件添加，保持文件权限
         datas.append((browser_path, target_path))
         print(f"添加浏览器文件: {browser_path} -> {target_path}")
 
 if not browser_paths:
     print("警告: 未找到Playwright浏览器，将不包含在打包中")
+
+# 自定义二进制文件过滤函数，排除浏览器可执行文件的签名检查
+def filter_binaries(binaries):
+    """过滤二进制文件，排除浏览器相关文件"""
+    filtered = []
+    for binary in binaries:
+        # 跳过浏览器相关的可执行文件
+        if 'playwright_browsers' not in binary[1] and 'Chromium' not in binary[0]:
+            filtered.append(binary)
+        else:
+            print(f"跳过浏览器二进制文件: {binary[0]}")
+    return filtered
 
 # 隐藏导入
 hiddenimports = [
@@ -86,6 +99,9 @@ a = Analysis(
     noarchive=False,
 )
 
+# 过滤二进制文件，避免浏览器文件的代码签名问题
+a.binaries = filter_binaries(a.binaries)
+
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
@@ -99,13 +115,13 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,  # 禁用UPX压缩，避免浏览器文件压缩问题
     upx_exclude=[],
     runtime_tmpdir=None,
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
-    codesign_identity=None,
+    codesign_identity=None,  # 禁用代码签名
     entitlements_file=None,
 )
