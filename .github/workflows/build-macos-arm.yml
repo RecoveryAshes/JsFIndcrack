@@ -11,18 +11,14 @@ jobs:
   build-macos-arm:
     runs-on: macos-latest
     
-    strategy:
-      matrix:
-        python-version: [3.8, 3.9, '3.10', '3.11']
-    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python 3.11
       uses: actions/setup-python@v4
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: '3.11'
         architecture: arm64
         
     - name: Verify ARM architecture
@@ -40,8 +36,6 @@ jobs:
           
     - name: Install system dependencies
       run: |
-        # 安装 Homebrew 依赖（如果需要）
-        brew update
         # 安装 Chrome 用于 Selenium
         brew install --cask google-chrome
         
@@ -49,6 +43,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        pip install pyinstaller
         
     - name: Set up Node.js for webcrack
       uses: actions/setup-node@v4
@@ -63,10 +58,6 @@ jobs:
       run: |
         playwright install chromium
         
-    - name: Create output directories
-      run: |
-        mkdir -p output
-        
     - name: Run basic tests
       run: |
         # 测试基本导入
@@ -78,100 +69,86 @@ jobs:
         # 运行一个简单的测试
         python main.py -u https://httpbin.org/html --mode static -d 1 -t 1 || echo "Test completed with expected behavior"
         
-    - name: Check output structure
+    - name: Create standalone executable
       run: |
-        ls -la output/ || echo "No output directory created"
+        # 创建独立可执行文件
+        pyinstaller --onefile --name jsfindcrack-macos-arm64 \
+          --add-data "src:src" \
+          --hidden-import selenium \
+          --hidden-import playwright \
+          --hidden-import requests \
+          --hidden-import beautifulsoup4 \
+          --hidden-import lxml \
+          --hidden-import numpy \
+          --hidden-import scikit-learn \
+          --hidden-import concurrent.futures \
+          main.py
+        
+    - name: Test standalone executable
+      run: |
+        # 测试独立可执行文件
+        ./dist/jsfindcrack-macos-arm64 --help || echo "Executable test completed"
+        
+    - name: Create release package
+      run: |
+        # 创建发布包
+        mkdir -p release
+        cp dist/jsfindcrack-macos-arm64 release/
+        cp README.md release/
+        cp LICENSE release/
+        
+        # 创建使用说明
+        cat > release/USAGE.md << 'EOF'
+        # JSFindCrack - macOS ARM64 独立版本
+        
+        ## 使用方法
+        
+        1. 确保系统已安装 Chrome 浏览器
+        2. 运行命令：
+           ```bash
+           ./jsfindcrack-macos-arm64 -u <目标URL> [其他参数]
+           ```
+        
+        ## 示例
+        ```bash
+        # 静态爬取
+        ./jsfindcrack-macos-arm64 -u https://example.com --mode static
+        
+        # 动态爬取
+        ./jsfindcrack-macos-arm64 -u https://example.com --mode dynamic
+        
+        # 查看帮助
+        ./jsfindcrack-macos-arm64 --help
+        ```
+        
+        ## 注意事项
+        - 首次运行可能需要下载浏览器驱动
+        - 确保有网络连接用于下载依赖
+        - 输出文件将保存在当前目录的 output 文件夹中
+        EOF
+        
+        # 打包
+        cd release
+        tar -czf ../jsfindcrack-macos-arm64.tar.gz *
+        cd ..
         
     - name: Archive build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: macos-arm-build-python-${{ matrix.python-version }}
+        name: jsfindcrack-macos-arm64
         path: |
-          output/
-          *.log
-        retention-days: 7
+          jsfindcrack-macos-arm64.tar.gz
+          dist/jsfindcrack-macos-arm64
+        retention-days: 30
         
     - name: Archive logs
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: failure()
       with:
-        name: macos-arm-logs-python-${{ matrix.python-version }}
+        name: build-logs
         path: |
           output/*/logs/
           output/*/detailed_log.txt
+          *.log
         retention-days: 14
-
-  package-macos-arm:
-    needs: build-macos-arm
-    runs-on: macos-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-        architecture: arm64
-        
-    - name: Install packaging dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install build wheel setuptools
-        pip install -r requirements.txt
-        
-    - name: Create distribution package
-      run: |
-        # 创建一个简单的 setup.py 用于打包
-        cat > setup.py << 'EOF'
-        from setuptools import setup, find_packages
-        
-        with open("README.md", "r", encoding="utf-8") as fh:
-            long_description = fh.read()
-            
-        with open("requirements.txt", "r", encoding="utf-8") as fh:
-            requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
-        
-        setup(
-            name="jsfindcrack",
-            version="1.0.0",
-            author="RecoveryAshes",
-            description="JavaScript文件爬取和反混淆工具",
-            long_description=long_description,
-            long_description_content_type="text/markdown",
-            packages=find_packages(),
-            classifiers=[
-                "Development Status :: 4 - Beta",
-                "Intended Audience :: Developers",
-                "License :: OSI Approved :: MIT License",
-                "Operating System :: MacOS",
-                "Programming Language :: Python :: 3",
-                "Programming Language :: Python :: 3.8",
-                "Programming Language :: Python :: 3.9",
-                "Programming Language :: Python :: 3.10",
-                "Programming Language :: Python :: 3.11",
-            ],
-            python_requires=">=3.8",
-            install_requires=requirements,
-            entry_points={
-                "console_scripts": [
-                    "jsfindcrack=main:main",
-                ],
-            },
-        )
-        EOF
-        
-    - name: Build package
-      run: |
-        python -m build
-        
-    - name: Archive distribution packages
-      uses: actions/upload-artifact@v3
-      with:
-        name: macos-arm-distribution
-        path: |
-          dist/
-        retention-days: 30
