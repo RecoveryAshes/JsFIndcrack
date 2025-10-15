@@ -5,7 +5,7 @@
 
 一个功能强大的JavaScript文件爬取和反混淆工具，支持静态和动态爬取，具备断点续爬、并发处理和智能反混淆等高级功能。
 
-## ✨ 主要特性
+## ✨主要特性
 
 - 🕷️ **多模式爬取**: 支持静态HTML解析和动态JavaScript执行两种爬取模式
 -**Source Map支持**: 自动识别和下载JavaScript Source Map文件(.map, .js.map)
