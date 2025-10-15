@@ -15,7 +15,9 @@ from .config import (
 from ..utils.utils import is_minified_js, convert_to_utf8, format_file_size
 from ..utils.logger import get_logger
 
-logger = get_logger("deobfuscator")
+# 延迟logger初始化函数
+def _get_logger():
+    return get_logger("deobfuscator")
 
 class JSDeobfuscator:
     """JavaScript反混淆器"""
@@ -35,16 +37,16 @@ class JSDeobfuscator:
                 timeout=10
             )
             if result.returncode == 0:
-                logger.info(f"webcrack工具可用: {result.stdout.strip()}")
+                _get_logger().info(f"webcrack工具可用: {result.stdout.strip()}")
                 return True
             else:
-                logger.warning("webcrack工具不可用，将跳过反混淆步骤")
+                _get_logger().warning("webcrack工具不可用，将跳过反混淆步骤")
                 return False
         except FileNotFoundError:
-            logger.warning("未找到webcrack工具，请确保已安装并在PATH中")
+            _get_logger().warning("未找到webcrack工具，请确保已安装并在PATH中")
             return False
         except Exception as e:
-            logger.error(f"检查webcrack工具失败: {e}")
+            _get_logger().error(f"检查webcrack工具失败: {e}")
             return False
     
     def _should_deobfuscate(self, file_path: Path) -> bool:
@@ -55,25 +57,25 @@ class JSDeobfuscator:
             
             # 检查文件大小
             if len(content) < 100:
-                logger.debug(f"文件太小，跳过反混淆: {file_path}")
+                _get_logger().debug(f"文件太小，跳过反混淆: {file_path}")
                 return False
             
             # 检查是否为压缩/混淆代码
             if is_minified_js(content):
-                logger.debug(f"检测到混淆代码，需要反混淆: {file_path}")
+                _get_logger().debug(f"检测到混淆代码，需要反混淆: {file_path}")
                 return True
             
-            logger.debug(f"文件未混淆，跳过反混淆: {file_path}")
+            _get_logger().debug(f"文件未混淆，跳过反混淆: {file_path}")
             return False
             
         except Exception as e:
-            logger.error(f"检查文件是否需要反混淆失败 {file_path}: {e}")
+            _get_logger().error(f"检查文件是否需要反混淆失败 {file_path}: {e}")
             return False
     
     def _deobfuscate_file(self, input_path: Path, output_path: Path) -> bool:
         """使用webcrack反混淆单个文件"""
         try:
-            logger.info(f"正在反混淆: {input_path}")
+            _get_logger().info(f"正在反混淆: {input_path}")
             
             # 确保输出目录存在
             output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -121,13 +123,13 @@ class JSDeobfuscator:
                     }
                     self.processed_files.append(file_info)
                     
-                    logger.info(f"反混淆成功: {input_path} -> {output_path}")
+                    _get_logger().info(f"反混淆成功: {input_path} -> {output_path}")
                     return True
                 else:
                     # 清理临时目录
                     if temp_output_dir.exists():
                         shutil.rmtree(temp_output_dir)
-                    logger.error(f"webcrack执行成功但未生成输出文件: {webcrack_output}")
+                    _get_logger().error(f"webcrack执行成功但未生成输出文件: {webcrack_output}")
                     return False
             else:
                 # 清理临时目录
@@ -135,7 +137,7 @@ class JSDeobfuscator:
                     shutil.rmtree(temp_output_dir)
                     
                 error_msg = result.stderr.strip() if result.stderr else "未知错误"
-                logger.error(f"webcrack执行失败: {error_msg}")
+                _get_logger().error(f"webcrack执行失败: {error_msg}")
                 
                 # 记录失败信息
                 self.failed_files.append({
@@ -150,7 +152,7 @@ class JSDeobfuscator:
             if 'temp_output_dir' in locals() and temp_output_dir.exists():
                 shutil.rmtree(temp_output_dir)
                 
-            logger.error(f"webcrack执行超时: {input_path}")
+            _get_logger().error(f"webcrack执行超时: {input_path}")
             self.failed_files.append({
                 'input_path': str(input_path),
                 'error': '执行超时',
@@ -163,7 +165,7 @@ class JSDeobfuscator:
             if 'temp_output_dir' in locals() and temp_output_dir.exists():
                 shutil.rmtree(temp_output_dir)
                 
-            logger.error(f"反混淆文件失败 {input_path}: {e}")
+            _get_logger().error(f"反混淆文件失败 {input_path}: {e}")
             self.failed_files.append({
                 'input_path': str(input_path),
                 'error': str(e),
@@ -193,11 +195,11 @@ class JSDeobfuscator:
             }
             self.skipped_files.append(file_info)
             
-            logger.debug(f"复制未混淆文件: {input_path} -> {output_path}")
+            _get_logger().debug(f"复制未混淆文件: {input_path} -> {output_path}")
             return True
             
         except Exception as e:
-            logger.error(f"复制文件失败 {input_path}: {e}")
+            _get_logger().error(f"复制文件失败 {input_path}: {e}")
             return False
     
     def process_file(self, input_path: Path, file_type: str, dirs: Dict[str, Path] = None) -> bool:
@@ -228,7 +230,7 @@ class JSDeobfuscator:
                 return self._copy_unobfuscated_file(input_path, output_path)
                 
         except Exception as e:
-            logger.error(f"处理文件失败 {input_path}: {e}")
+            _get_logger().error(f"处理文件失败 {input_path}: {e}")
             return False
     
     def process_directory(self, file_type: str, source_dir: Path, max_workers: int = 4, dirs: Dict[str, Path] = None) -> Dict[str, Any]:
@@ -236,7 +238,7 @@ class JSDeobfuscator:
         input_dir = source_dir
         
         if not input_dir.exists():
-            logger.warning(f"输入目录不存在: {input_dir}")
+            _get_logger().warning(f"输入目录不存在: {input_dir}")
             return {
                 'total_files': 0,
                 'processed_files': 0,
@@ -250,7 +252,7 @@ class JSDeobfuscator:
             js_files.extend(input_dir.rglob(f'*{ext}'))
         
         if not js_files:
-            logger.info(f"在 {input_dir} 中未找到JavaScript文件")
+            _get_logger().info(f"在 {input_dir} 中未找到JavaScript文件")
             return {
                 'total_files': 0,
                 'processed_files': 0,
@@ -258,7 +260,7 @@ class JSDeobfuscator:
                 'skipped_files': 0
             }
         
-        logger.info(f"开始处理 {len(js_files)} 个{file_type}JavaScript文件...")
+        _get_logger().info(f"开始处理 {len(js_files)} 个{file_type}JavaScript文件...")
         
         # 使用线程池并行处理文件，添加进度条
         with tqdm(total=len(js_files), desc=f"处理{file_type}JS文件", unit="文件") as pbar:
@@ -280,11 +282,11 @@ class JSDeobfuscator:
                         pbar.update(1)
                         
                         if success:
-                            logger.debug(f"处理成功: {file_path}")
+                            _get_logger().debug(f"处理成功: {file_path}")
                         else:
-                            logger.warning(f"处理失败: {file_path}")
+                            _get_logger().warning(f"处理失败: {file_path}")
                     except Exception as e:
-                        logger.error(f"处理文件异常 {file_path}: {e}")
+                        _get_logger().error(f"处理文件异常 {file_path}: {e}")
                         pbar.update(1)
         
         return {
@@ -296,7 +298,7 @@ class JSDeobfuscator:
     
     def process_all_files(self, dirs: Dict[str, Path], max_workers: int = 4) -> Dict[str, Any]:
         """处理所有JavaScript文件（静态和动态）"""
-        logger.info("开始反混淆处理...")
+        _get_logger().info("开始反混淆处理...")
         
         # 重置统计信息
         self.processed_files.clear()
@@ -335,7 +337,7 @@ class JSDeobfuscator:
         else:
             total_stats['total']['success_rate'] = 0
         
-        logger.info(f"反混淆处理完成: 总文件数={total_files}, "
+        _get_logger().info(f"反混淆处理完成: 总文件数={total_files}, "
                    f"成功={total_stats['total']['processed_files']}, "
                    f"跳过={total_stats['total']['skipped_files']}, "
                    f"失败={total_stats['total']['failed_files']}")

@@ -5,10 +5,16 @@ import logging
 import sys
 from pathlib import Path
 from colorama import Fore, Style, init
-from ..core.config import LOG_LEVEL, LOG_FORMAT, LOG_FILE, LOGS_DIR
 
 # 初始化colorama
 init(autoreset=True)
+
+# 日志配置常量（避免循环导入）
+BASE_DIR = Path(__file__).parent.parent.parent
+LOGS_DIR = BASE_DIR / "logs"
+LOG_LEVEL = "INFO"
+LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+LOG_FILE = LOGS_DIR / "js_crawler.log"
 
 class ColoredFormatter(logging.Formatter):
     """彩色日志格式化器"""

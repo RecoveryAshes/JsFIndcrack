@@ -23,14 +23,19 @@ if USE_EMBEDDED_BROWSER and BROWSER_ENGINE == "playwright":
         PLAYWRIGHT_AVAILABLE = True
     except ImportError:
         PLAYWRIGHT_AVAILABLE = False
-        logger = get_logger("main")
-        logger.warning("Playwright未安装，将使用传统Selenium方式")
+        # 延迟logger初始化，避免循环导入
+        def _warn_playwright_unavailable():
+            setup_logger()
+            logger = get_logger("main")
+            _get_logger().warning("Playwright未安装，将使用传统Selenium方式")
+        _warn_playwright_unavailable()
 else:
     PLAYWRIGHT_AVAILABLE = False
 
-# 设置日志
-setup_logger()
-logger = get_logger("main")
+# 延迟logger初始化函数
+def _get_logger():
+    setup_logger()
+    return get_logger("main")
 
 class JSCrawler:
     """JavaScript爬取器 - 面向用户的主要接口"""
@@ -81,10 +86,10 @@ class JSCrawlerManager:
         try:
             checkpoint = load_checkpoint(self.checkpoint_file)
             if checkpoint:
-                logger.info("发现检查点文件，将从上次中断处继续")
+                _get_logger().info("发现检查点文件，将从上次中断处继续")
                 return checkpoint
         except Exception as e:
-            logger.error(f"加载检查点失败: {e}")
+            _get_logger().error(f"加载检查点失败: {e}")
         return None
     
     def save_checkpoint(self, data: Dict[str, Any]) -> bool:
@@ -93,7 +98,7 @@ class JSCrawlerManager:
             self.checkpoint_data.update(data)
             return save_checkpoint(self.checkpoint_data, self.checkpoint_file)
         except Exception as e:
-            logger.error(f"保存检查点失败: {e}")
+            _get_logger().error(f"保存检查点失败: {e}")
             return False
     
     def _is_anti_crawler_detected(self, results: Dict[str, Any]) -> bool:
@@ -133,23 +138,23 @@ class JSCrawlerManager:
                 try:
                     file_hash = calculate_file_hash(js_file)
                     file_hashes[file_hash] = str(js_file.name)
-                    logger.debug(f"收集文件哈希: {js_file.name} -> {file_hash}")
+                    _get_logger().debug(f"收集文件哈希: {js_file.name} -> {file_hash}")
                 except Exception as e:
-                    logger.warning(f"计算文件哈希失败 {js_file}: {e}")
+                    _get_logger().warning(f"计算文件哈希失败 {js_file}: {e}")
         
-        logger.info(f"收集到 {len(file_hashes)} 个已下载文件的哈希值")
+        _get_logger().info(f"收集到 {len(file_hashes)} 个已下载文件的哈希值")
         return file_hashes
     
     def crawl_static_js(self, url: str, max_depth: int = 2, max_workers: int = 4, resume: bool = False) -> Dict[str, Any]:
         """爬取静态JavaScript文件"""
-        logger.info("=" * 60)
-        logger.info("开始静态JavaScript文件爬取")
-        logger.info("=" * 60)
+        _get_logger().info("=" * 60)
+        _get_logger().info("开始静态JavaScript文件爬取")
+        _get_logger().info("=" * 60)
         
         try:
             # 检查是否需要恢复
             if resume and 'static_completed' in self.checkpoint_data:
-                logger.info("静态爬取已完成，跳过此步骤")
+                _get_logger().info("静态爬取已完成，跳过此步骤")
                 return self.checkpoint_data.get('static_results', {})
             
             # 执行静态爬取
@@ -157,8 +162,8 @@ class JSCrawlerManager:
             
             # 检查是否遇到反爬虫机制
             if self._is_anti_crawler_detected(results):
-                logger.warning("检测到反爬虫机制，静态爬取失败")
-                logger.info("将自动切换到动态爬取模式...")
+                _get_logger().warning("检测到反爬虫机制，静态爬取失败")
+                _get_logger().info("将自动切换到动态爬取模式...")
                 # 标记静态爬取失败，但不保存为完成状态
                 self.save_checkpoint({
                     'static_failed_anti_crawler': True,
@@ -173,20 +178,20 @@ class JSCrawlerManager:
             })
             
             # 输出统计信息
-            logger.info(f"静态爬取完成:")
-            logger.info(f"  - 发现文件数: {results['total_discovered']}")
-            logger.info(f"  - 成功下载: {results['successful_downloads']}")
-            logger.info(f"  - 失败下载: {results['failed_downloads']}")
-            logger.info(f"  - 访问页面数: {results['visited_pages']}")
+            _get_logger().info(f"静态爬取完成:")
+            _get_logger().info(f"  - 发现文件数: {results['total_discovered']}")
+            _get_logger().info(f"  - 成功下载: {results['successful_downloads']}")
+            _get_logger().info(f"  - 失败下载: {results['failed_downloads']}")
+            _get_logger().info(f"  - 访问页面数: {results['visited_pages']}")
             
             return results
             
         except Exception as e:
-            logger.error(f"静态爬取失败: {e}")
+            _get_logger().error(f"静态爬取失败: {e}")
             # 检查是否是反爬虫相关的错误
             if self._is_anti_crawler_error(e):
-                logger.warning("检测到反爬虫机制导致的错误")
-                logger.info("将自动切换到动态爬取模式...")
+                _get_logger().warning("检测到反爬虫机制导致的错误")
+                _get_logger().info("将自动切换到动态爬取模式...")
                 self.save_checkpoint({
                     'static_failed_anti_crawler': True
                 })
@@ -202,14 +207,14 @@ class JSCrawlerManager:
     
     def crawl_dynamic_js(self, url: str, wait_time: int = 10, playwright_tabs: int = 4, headless: bool = True, resume: bool = False) -> Dict[str, Any]:
         """爬取动态JavaScript文件"""
-        logger.info("=" * 60)
-        logger.info("开始动态JavaScript文件爬取")
-        logger.info("=" * 60)
+        _get_logger().info("=" * 60)
+        _get_logger().info("开始动态JavaScript文件爬取")
+        _get_logger().info("=" * 60)
         
         try:
             # 检查是否需要恢复
             if resume and 'dynamic_completed' in self.checkpoint_data:
-                logger.info("动态爬取已完成，跳过此步骤")
+                _get_logger().info("动态爬取已完成，跳过此步骤")
                 return self.checkpoint_data.get('dynamic_results', {})
             
             # 收集已下载文件的哈希值，用于跨模式去重
@@ -217,17 +222,17 @@ class JSCrawlerManager:
             
             # 根据配置选择爬取方式
             if USE_EMBEDDED_BROWSER and PLAYWRIGHT_AVAILABLE:
-                logger.info(f"使用Playwright进行动态爬取，最大标签页数: {playwright_tabs}，无头模式: {headless}")
+                _get_logger().info(f"使用Playwright进行动态爬取，最大标签页数: {playwright_tabs}，无头模式: {headless}")
                 results = self._crawl_with_playwright(url, wait_time, playwright_tabs, headless, existing_file_hashes)
             else:
                 # 使用传统Selenium方式
-                logger.info("使用传统Selenium进行动态爬取")
+                _get_logger().info("使用传统Selenium进行动态爬取")
                 # 为传统Selenium动态爬虫设置静态文件哈希值
                 if existing_file_hashes:
                     self.dynamic_crawler.content_hashes.update(existing_file_hashes.keys())
                     self.dynamic_crawler.hash_to_filename.update(existing_file_hashes)
                     self.dynamic_crawler.static_file_hashes.update(existing_file_hashes.keys())
-                    logger.info(f"为传统动态爬虫设置了 {len(existing_file_hashes)} 个静态文件哈希")
+                    _get_logger().info(f"为传统动态爬虫设置了 {len(existing_file_hashes)} 个静态文件哈希")
                 results = self.dynamic_crawler.crawl_dynamic_js(url, wait_time)
             
             # 保存检查点
@@ -237,28 +242,28 @@ class JSCrawlerManager:
             })
             
             # 输出统计信息
-            logger.info(f"动态爬取完成:")
-            logger.info(f"  - 发现文件数: {results['total_discovered']}")
-            logger.info(f"  - 成功下载: {results['successful_downloads']}")
-            logger.info(f"  - 失败下载: {results['failed_downloads']}")
+            _get_logger().info(f"动态爬取完成:")
+            _get_logger().info(f"  - 发现文件数: {results['total_discovered']}")
+            _get_logger().info(f"  - 成功下载: {results['successful_downloads']}")
+            _get_logger().info(f"  - 失败下载: {results['failed_downloads']}")
             
             duplicated_files = results.get('duplicated_files', 0)
             cross_mode_duplicated = results.get('cross_mode_duplicated_files', 0)
             total_duplicated = duplicated_files + cross_mode_duplicated
             
             if total_duplicated > 0:
-                logger.info(f"  - 重复文件: {total_duplicated} (已跳过)")
+                _get_logger().info(f"  - 重复文件: {total_duplicated} (已跳过)")
                 if cross_mode_duplicated > 0:
-                    logger.info(f"    - 模式内去重: {duplicated_files}")
-                    logger.info(f"    - 跨模式去重: {cross_mode_duplicated}")
-                    logger.info(f"  - 去重效果: 节省了 {total_duplicated} 个重复文件的下载 (其中 {cross_mode_duplicated} 个为跨模式去重)")
+                    _get_logger().info(f"    - 模式内去重: {duplicated_files}")
+                    _get_logger().info(f"    - 跨模式去重: {cross_mode_duplicated}")
+                    _get_logger().info(f"  - 去重效果: 节省了 {total_duplicated} 个重复文件的下载 (其中 {cross_mode_duplicated} 个为跨模式去重)")
                 else:
-                    logger.info(f"  - 去重效果: 节省了 {total_duplicated} 个重复文件的下载")
+                    _get_logger().info(f"  - 去重效果: 节省了 {total_duplicated} 个重复文件的下载")
             
             return results
             
         except Exception as e:
-            logger.error(f"动态爬取失败: {e}")
+            _get_logger().error(f"动态爬取失败: {e}")
             return {
                 'total_discovered': 0,
                 'successful_downloads': 0,
@@ -300,20 +305,20 @@ class JSCrawlerManager:
     def run_similarity_analysis(self, similarity_threshold: float = 0.8, 
                                similarity_workers: int = None, resume: bool = False) -> Dict[str, Any]:
         """运行智能相似度分析"""
-        logger.info("=" * 60)
-        logger.info("开始智能相似度分析")
-        logger.info("=" * 60)
+        _get_logger().info("=" * 60)
+        _get_logger().info("开始智能相似度分析")
+        _get_logger().info("=" * 60)
         
         try:
             # 检查是否需要恢复
             if resume and 'similarity_completed' in self.checkpoint_data:
-                logger.info("相似度分析已完成，跳过此步骤")
+                _get_logger().info("相似度分析已完成，跳过此步骤")
                 return self.checkpoint_data.get('similarity_results', {})
             
             # 检查decode目录是否存在
             decode_dir = self.dirs['decrypted_dir']
             if not decode_dir.exists() or not any(decode_dir.glob('*.js')):
-                logger.warning("未找到反编译文件，跳过相似度分析")
+                _get_logger().warning("未找到反编译文件，跳过相似度分析")
                 return {
                     'success': True,
                     'total_files': 0,
@@ -334,9 +339,9 @@ class JSCrawlerManager:
                 max_workers=similarity_workers
             )
             
-            logger.info(f"开始分析 {decode_dir} 中的反编译文件")
-            logger.info(f"相似度阈值: {similarity_threshold}")
-            logger.info(f"并行进程数: {similarity_workers or 'auto'}")
+            _get_logger().info(f"开始分析 {decode_dir} 中的反编译文件")
+            _get_logger().info(f"相似度阈值: {similarity_threshold}")
+            _get_logger().info(f"并行进程数: {similarity_workers or 'auto'}")
             
             # 执行分析
             report = processor.process_directory(str(decode_dir), str(similarity_output_dir))
@@ -360,17 +365,17 @@ class JSCrawlerManager:
                 'similarity_results': similarity_results
             })
             
-            logger.info(f"相似度分析完成！")
-            logger.info(f"总文件数: {report['total_files']}")
-            logger.info(f"唯一文件数: {report['unique_files']}")
-            logger.info(f"相似文件组: {report['similar_groups']}")
-            logger.info(f"处理时间: {report['processing_time_seconds']:.2f} 秒")
-            logger.info(f"结果保存到: {similarity_output_dir}")
+            _get_logger().info(f"相似度分析完成！")
+            _get_logger().info(f"总文件数: {report['total_files']}")
+            _get_logger().info(f"唯一文件数: {report['unique_files']}")
+            _get_logger().info(f"相似文件组: {report['similar_groups']}")
+            _get_logger().info(f"处理时间: {report['processing_time_seconds']:.2f} 秒")
+            _get_logger().info(f"结果保存到: {similarity_output_dir}")
             
             return similarity_results
             
         except Exception as e:
-            logger.error(f"相似度分析失败: {e}")
+            _get_logger().error(f"相似度分析失败: {e}")
             return {
                 'success': False,
                 'error': str(e),
@@ -384,14 +389,14 @@ class JSCrawlerManager:
 
     def deobfuscate_files(self, max_workers: int = 4, resume: bool = False) -> Dict[str, Any]:
         """反混淆JavaScript文件"""
-        logger.info("=" * 60)
-        logger.info("开始JavaScript文件反混淆")
-        logger.info("=" * 60)
+        _get_logger().info("=" * 60)
+        _get_logger().info("开始JavaScript文件反混淆")
+        _get_logger().info("=" * 60)
         
         try:
             # 检查是否需要恢复
             if resume and 'deobfuscation_completed' in self.checkpoint_data:
-                logger.info("反混淆已完成，跳过此步骤")
+                _get_logger().info("反混淆已完成，跳过此步骤")
                 return self.checkpoint_data.get('deobfuscation_results', {})
             
             # 执行反混淆
@@ -405,17 +410,17 @@ class JSCrawlerManager:
             
             # 输出统计信息
             total = results['total']
-            logger.info(f"反混淆完成:")
-            logger.info(f"  - 总文件数: {total['total_files']}")
-            logger.info(f"  - 处理成功: {total['processed_files']}")
-            logger.info(f"  - 直接复制: {total['skipped_files']}")
-            logger.info(f"  - 处理失败: {total['failed_files']}")
-            logger.info(f"  - 成功率: {total.get('success_rate', 0):.1f}%")
+            _get_logger().info(f"反混淆完成:")
+            _get_logger().info(f"  - 总文件数: {total['total_files']}")
+            _get_logger().info(f"  - 处理成功: {total['processed_files']}")
+            _get_logger().info(f"  - 直接复制: {total['skipped_files']}")
+            _get_logger().info(f"  - 处理失败: {total['failed_files']}")
+            _get_logger().info(f"  - 成功率: {total.get('success_rate', 0):.1f}%")
             
             return results
             
         except Exception as e:
-            logger.error(f"反混淆失败: {e}")
+            _get_logger().error(f"反混淆失败: {e}")
             return {
                 'static': {'total_files': 0, 'processed_files': 0, 'failed_files': 0, 'skipped_files': 0},
                 'dynamic': {'total_files': 0, 'processed_files': 0, 'failed_files': 0, 'skipped_files': 0},
@@ -536,10 +541,10 @@ class JSCrawlerManager:
             
             # 打印整合报告摘要
             summary = main_report_generator.generate_summary_report()
-            logger.info(f"整合报告摘要: {summary['crawl_summary']}")
+            _get_logger().info(f"整合报告摘要: {summary['crawl_summary']}")
             
         except Exception as e:
-            logger.error(f"整合详细报告失败: {e}")
+            _get_logger().error(f"整合详细报告失败: {e}")
     
     def run(self, url: str, max_depth: int = 2, wait_time: int = 10, 
             max_workers: int = 4, playwright_tabs: int = 4, headless: bool = True, 
@@ -547,14 +552,14 @@ class JSCrawlerManager:
             similarity_threshold: float = 0.8, similarity_workers: int = None,
             auto_similarity: bool = True) -> Dict[str, Any]:
         """运行完整的爬取和反混淆流程"""
-        logger.info("JavaScript文件爬取和反混淆工具启动")
-        logger.info(f"目标URL: {url}")
-        logger.info(f"最大深度: {max_depth}")
-        logger.info(f"动态等待时间: {wait_time}秒")
-        logger.info(f"并行工作线程: {max_workers}")
-        logger.info(f"Playwright标签页数: {playwright_tabs}")
-        logger.info(f"无头模式: {headless}")
-        logger.info(f"爬取模式: {mode}")
+        _get_logger().info("JavaScript文件爬取和反混淆工具启动")
+        _get_logger().info(f"目标URL: {url}")
+        _get_logger().info(f"最大深度: {max_depth}")
+        _get_logger().info(f"动态等待时间: {wait_time}秒")
+        _get_logger().info(f"并行工作线程: {max_workers}")
+        _get_logger().info(f"Playwright标签页数: {playwright_tabs}")
+        _get_logger().info(f"无头模式: {headless}")
+        _get_logger().info(f"爬取模式: {mode}")
         
         try:
             # 确保目录存在
@@ -586,7 +591,7 @@ class JSCrawlerManager:
                 # 步骤2: 动态爬取
                 # 如果静态爬取失败，强制执行动态爬取
                 if static_failed_anti_crawler:
-                    logger.info("由于检测到反爬虫机制，将强制执行动态爬取")
+                    _get_logger().info("由于检测到反爬虫机制，将强制执行动态爬取")
                     dynamic_results = self.crawl_dynamic_js(url, wait_time, playwright_tabs, headless, resume=False)  # 不跳过动态爬取
                 else:
                     dynamic_results = self.crawl_dynamic_js(url, wait_time, playwright_tabs, headless, resume)
@@ -595,21 +600,21 @@ class JSCrawlerManager:
             deobfuscation_results = {}
             if static_results or dynamic_results:
                 deobfuscation_results = self.deobfuscate_files(max_workers, resume)
-                logger.info(f"反混淆完成，结果: {deobfuscation_results}")
+                _get_logger().info(f"反混淆完成，结果: {deobfuscation_results}")
             
             # 步骤4: 智能相似度分析（如果启用且有反编译文件）
             similarity_results = {}
             # 检查是否有文件需要分析
             total_files = deobfuscation_results.get('total', {}).get('total_files', 0)
-            logger.info(f"相似度分析检查: similarity_enabled={similarity_enabled}, auto_similarity={auto_similarity}, total_files={total_files}")
-            logger.info(f"deobfuscation_results结构: {deobfuscation_results}")
+            _get_logger().info(f"相似度分析检查: similarity_enabled={similarity_enabled}, auto_similarity={auto_similarity}, total_files={total_files}")
+            _get_logger().info(f"deobfuscation_results结构: {deobfuscation_results}")
             if similarity_enabled or (auto_similarity and total_files > 0):
-                logger.info("开始执行相似度分析...")
+                _get_logger().info("开始执行相似度分析...")
                 similarity_results = self.run_similarity_analysis(
                     similarity_threshold, similarity_workers, resume
                 )
             else:
-                logger.info("跳过相似度分析")
+                _get_logger().info("跳过相似度分析")
             
             # 生成最终报告
             final_report = self.generate_final_report(
@@ -625,12 +630,12 @@ class JSCrawlerManager:
             # 清理检查点文件
             if self.checkpoint_file.exists():
                 self.checkpoint_file.unlink()
-                logger.info("已清理检查点文件")
+                _get_logger().info("已清理检查点文件")
             
             return final_report
             
         except KeyboardInterrupt:
-            logger.warning("用户中断操作，已保存检查点")
+            _get_logger().warning("用户中断操作，已保存检查点")
             return {
                 'success': False,
                 'error': '用户中断操作',
@@ -638,7 +643,7 @@ class JSCrawlerManager:
                 'output_dir': self.dirs.get('target_output_dir', '')
             }
         except Exception as e:
-            logger.error(f"程序执行失败: {e}")
+            _get_logger().error(f"程序执行失败: {e}")
             return {
                 'success': False,
                 'error': str(e),
@@ -648,61 +653,61 @@ class JSCrawlerManager:
     
     def print_final_report(self, report: Dict[str, Any]):
         """打印最终报告"""
-        logger.info("=" * 80)
-        logger.info("最终统计报告")
-        logger.info("=" * 80)
+        _get_logger().info("=" * 80)
+        _get_logger().info("最终统计报告")
+        _get_logger().info("=" * 80)
         
         summary = report['summary']
-        logger.info(f"开始时间: {summary['start_time']}")
-        logger.info(f"结束时间: {summary['end_time']}")
-        logger.info(f"总耗时: {summary['total_time']}")
-        logger.info("")
+        _get_logger().info(f"开始时间: {summary['start_time']}")
+        _get_logger().info(f"结束时间: {summary['end_time']}")
+        _get_logger().info(f"总耗时: {summary['total_time']}")
+        _get_logger().info("")
         
-        logger.info("文件发现和下载:")
-        logger.info(f"  总发现文件数: {summary['total_discovered']}")
-        logger.info(f"  成功下载数: {summary['total_downloaded']}")
-        logger.info(f"  下载失败数: {summary['total_failed']}")
-        logger.info(f"  下载成功率: {summary['download_success_rate']}")
-        logger.info(f"  总文件大小: {summary['total_size']}")
-        logger.info("")
+        _get_logger().info("文件发现和下载:")
+        _get_logger().info(f"  总发现文件数: {summary['total_discovered']}")
+        _get_logger().info(f"  成功下载数: {summary['total_downloaded']}")
+        _get_logger().info(f"  下载失败数: {summary['total_failed']}")
+        _get_logger().info(f"  下载成功率: {summary['download_success_rate']}")
+        _get_logger().info(f"  总文件大小: {summary['total_size']}")
+        _get_logger().info("")
         
         static = report['static_crawling']
-        logger.info("静态爬取:")
-        logger.info(f"  发现文件: {static['discovered']}")
-        logger.info(f"  下载成功: {static['downloaded']}")
-        logger.info(f"  下载失败: {static['failed']}")
-        logger.info(f"  访问页面: {static['pages_visited']}")
-        logger.info("")
+        _get_logger().info("静态爬取:")
+        _get_logger().info(f"  发现文件: {static['discovered']}")
+        _get_logger().info(f"  下载成功: {static['downloaded']}")
+        _get_logger().info(f"  下载失败: {static['failed']}")
+        _get_logger().info(f"  访问页面: {static['pages_visited']}")
+        _get_logger().info("")
         
         dynamic = report['dynamic_crawling']
-        logger.info("动态爬取:")
-        logger.info(f"  发现文件: {dynamic['discovered']}")
-        logger.info(f"  下载成功: {dynamic['downloaded']}")
-        logger.info(f"  下载失败: {dynamic['failed']}")
-        logger.info("")
+        _get_logger().info("动态爬取:")
+        _get_logger().info(f"  发现文件: {dynamic['discovered']}")
+        _get_logger().info(f"  下载成功: {dynamic['downloaded']}")
+        _get_logger().info(f"  下载失败: {dynamic['failed']}")
+        _get_logger().info("")
         
         deob = report['deobfuscation']
-        logger.info("反混淆处理:")
-        logger.info(f"  总文件数: {deob['total_files']}")
-        logger.info(f"  反混淆处理: {deob['processed']}")
-        logger.info(f"  直接复制: {deob['copied']}")
-        logger.info(f"  处理失败: {deob['failed']}")
-        logger.info(f"  处理成功率: {deob['success_rate']}")
-        logger.info("")
+        _get_logger().info("反混淆处理:")
+        _get_logger().info(f"  总文件数: {deob['total_files']}")
+        _get_logger().info(f"  反混淆处理: {deob['processed']}")
+        _get_logger().info(f"  直接复制: {deob['copied']}")
+        _get_logger().info(f"  处理失败: {deob['failed']}")
+        _get_logger().info(f"  处理成功率: {deob['success_rate']}")
+        _get_logger().info("")
         
         # 显示相似度分析结果（如果有）
         if 'similarity_analysis' in report:
             sim = report['similarity_analysis']
-            logger.info("智能相似度分析:")
-            logger.info(f"  分析文件数: {sim['total_files']}")
-            logger.info(f"  相似文件组: {sim['similar_groups']}")
-            logger.info(f"  唯一文件数: {sim['unique_files']}")
-            logger.info(f"  去重率: {sim['deduplication_rate']}")
-            logger.info(f"  处理时间: {sim['processing_time']}")
-            logger.info(f"  输出目录: {sim['output_dir']}")
-            logger.info("")
+            _get_logger().info("智能相似度分析:")
+            _get_logger().info(f"  分析文件数: {sim['total_files']}")
+            _get_logger().info(f"  相似文件组: {sim['similar_groups']}")
+            _get_logger().info(f"  唯一文件数: {sim['unique_files']}")
+            _get_logger().info(f"  去重率: {sim['deduplication_rate']}")
+            _get_logger().info(f"  处理时间: {sim['processing_time']}")
+            _get_logger().info(f"  输出目录: {sim['output_dir']}")
+            _get_logger().info("")
         
-        logger.info("=" * 80)
+        _get_logger().info("=" * 80)
 
 def main():
     """主函数"""
@@ -733,7 +738,7 @@ def main():
     
     # 验证URL
     if not args.url.startswith(('http://', 'https://')):
-        logger.error("URL必须以http://或https://开头")
+        _get_logger().error("URL必须以http://或https://开头")
         sys.exit(1)
     
     # 创建爬取器并运行
@@ -761,7 +766,7 @@ def main():
             print(f"\n爬取失败: {result.get('error', '未知错误')}")
             sys.exit(1)
     except Exception as e:
-        logger.error(f"程序执行失败: {e}")
+        _get_logger().error(f"程序执行失败: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
