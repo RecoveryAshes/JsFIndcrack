@@ -249,7 +249,7 @@ tail -f output/example.com/logs/crawler.log
 
 如有问题或建议，请通过以下方式联系：
 
-- 提交 [Issue](https://github.com/https://github.com/RecoveryAshes/JsFIndcrack/JsFIndcrack/issues)
+- 提交 [Issue](https://github.com/RecoveryAshes/JsFIndcrack/issues)
 
 ---
 
