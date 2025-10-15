@@ -31,25 +31,41 @@ from ..utils.utils import is_supported_file, generate_file_path, convert_to_utf8
 from ..utils.logger import get_logger
 
 
-def get_packaged_browser_path():
+def get_packaged_browser_path(headless=True):
     """获取打包环境中的浏览器路径"""
     if getattr(sys, 'frozen', False):
         # 在打包环境中
+        base_path = Path(sys._MEIPASS)
+        
         if sys.platform == "darwin":  # macOS
-            # 在打包的可执行文件中，浏览器位于相对路径
-            base_path = Path(sys._MEIPASS)
+            if headless:
+                # 无头模式使用 headless_shell
+                browser_path = base_path / "playwright_browsers" / "chromium_headless_shell-1187" / "chrome-mac" / "headless_shell"
+                if browser_path.exists():
+                    return str(browser_path)
+            # 完整浏览器模式
             browser_path = base_path / "playwright_browsers" / "chromium-1187" / "chrome-mac" / "Chromium.app" / "Contents" / "MacOS" / "Chromium"
             if browser_path.exists():
                 return str(browser_path)
+                
         elif sys.platform.startswith("linux"):
-            # Linux环境
-            base_path = Path(sys._MEIPASS)
+            if headless:
+                # 无头模式使用 headless_shell
+                browser_path = base_path / "playwright_browsers" / "chromium_headless_shell-1187" / "chrome-linux" / "headless_shell"
+                if browser_path.exists():
+                    return str(browser_path)
+            # 完整浏览器模式
             browser_path = base_path / "playwright_browsers" / "chromium-1187" / "chrome-linux" / "chrome"
             if browser_path.exists():
                 return str(browser_path)
+                
         elif sys.platform.startswith("win"):
-            # Windows环境
-            base_path = Path(sys._MEIPASS)
+            if headless:
+                # 无头模式使用 headless_shell
+                browser_path = base_path / "playwright_browsers" / "chromium_headless_shell-1187" / "chrome-win" / "headless_shell.exe"
+                if browser_path.exists():
+                    return str(browser_path)
+            # 完整浏览器模式
             browser_path = base_path / "playwright_browsers" / "chromium-1187" / "chrome-win" / "chrome.exe"
             if browser_path.exists():
                 return str(browser_path)
@@ -150,7 +166,7 @@ class PlaywrightCrawler:
             self.playwright = await async_playwright().start()
             
             # 检查是否在打包环境中，如果是则使用打包的浏览器
-            packaged_browser_path = get_packaged_browser_path()
+            packaged_browser_path = get_packaged_browser_path(self.headless)
             
             # 浏览器启动参数
             browser_args = [
