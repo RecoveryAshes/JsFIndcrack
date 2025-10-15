@@ -281,9 +281,29 @@ class PlaywrightCrawler:
                 response = await page.goto(url, timeout=10000)
                 
                 if response and response.status == 200:
-                    content = await response.text()
-                    content_bytes = content.encode('utf-8')
-                    content_size = len(content_bytes)
+                    # 检查Content-Type，确保是文本文件
+                    content_type = response.headers.get('content-type', '').lower()
+                    
+                    # 只处理文本类型的文件
+                    if ('text' in content_type or 
+                        'javascript' in content_type or 
+                        'json' in content_type or
+                        'application/javascript' in content_type or
+                        'application/x-javascript' in content_type):
+                        
+                        try:
+                            content = await response.text()
+                            content_bytes = content.encode('utf-8')
+                            content_size = len(content_bytes)
+                        except UnicodeDecodeError as e:
+                            self.logger.error(f"UTF-8解码失败 {url}: {e}")
+                            self.stats['js_files_failed'] += 1
+                            return None
+                    else:
+                        # 非文本文件，跳过下载
+                        self.logger.warning(f"跳过非文本文件 {url} (Content-Type: {content_type})")
+                        self.stats['js_files_failed'] += 1
+                        return None
                     
                     # 检查内容是否重复
                     content_hash = get_content_hash(content_bytes)
@@ -310,19 +330,8 @@ class PlaywrightCrawler:
                             'original_file': existing_filename
                         }
                     
-                    # 生成文件路径
-                    if not filename.endswith('.js'):
-                        filename += '.js'
-                    
-                    # 避免文件名冲突
-                    counter = 1
-                    original_filename = filename
-                    while (output_dir / filename).exists():
-                        name, ext = original_filename.rsplit('.', 1)
-                        filename = f"{name}_{counter}.{ext}"
-                        counter += 1
-                    
-                    file_path = output_dir / filename
+                    # 生成文件路径（使用域名目录结构）
+                    file_path = generate_file_path(url, self.target_url, 'dynamic')
                     
                     # 保存文件
                     with open(file_path, 'w', encoding='utf-8') as f:
@@ -330,7 +339,7 @@ class PlaywrightCrawler:
                     
                     # 更新去重信息
                     self.content_hashes.add(content_hash)
-                    self.hash_to_filename[content_hash] = filename
+                    self.hash_to_filename[content_hash] = file_path.name
                     
                     self.completed_downloads.add(url)
                     self.stats['js_files_downloaded'] += 1
@@ -344,14 +353,14 @@ class PlaywrightCrawler:
                     else:
                         size_str = f"{content_size / (1024 * 1024):.1f} MB"
                     
-                    self.logger.info(f"下载完成: {filename} ({size_str})")
+                    self.logger.info(f"下载完成: {file_path.name} ({size_str})")
                     self.logger.info(f"保存路径: {file_path}")
                     
                     return {
                         'url': url,
                         'path': str(file_path),
                         'size': content_size,
-                        'filename': filename,
+                        'filename': file_path.name,
                         'duplicate': False,
                         'content_hash': content_hash
                     }
@@ -434,36 +443,65 @@ class PlaywrightCrawler:
         file_urls = set()
         
         try:
+            # 检查页面是否已关闭
+            if page.is_closed():
+                self.logger.warning("页面已关闭，跳过文件提取")
+                return file_urls
+            
             # 等待页面基本加载完成（不等待networkidle，加载过程中也能收集JS）
             await page.wait_for_load_state('domcontentloaded', timeout=10000)
             
-            # 执行JavaScript来获取所有script标签
-            script_urls = await page.evaluate("""
-                () => {
-                    const scripts = Array.from(document.querySelectorAll('script[src]'));
-                    return scripts.map(script => script.src).filter(src => src);
-                }
-            """)
+            # 检查页面是否仍然有效
+            if page.is_closed():
+                self.logger.warning("页面在等待加载时被关闭")
+                return file_urls
             
-            # 处理相对URL
-            for url in script_urls:
-                if url:
-                    absolute_url = urljoin(base_url, url)
-                    if self._is_supported_file(absolute_url):
-                        file_urls.add(absolute_url)
+            # 执行JavaScript来获取所有script标签
+            try:
+                script_urls = await page.evaluate("""
+                    () => {
+                        try {
+                            const scripts = Array.from(document.querySelectorAll('script[src]'));
+                            return scripts.map(script => script.src).filter(src => src);
+                        } catch(e) {
+                            return [];
+                        }
+                    }
+                """)
+                
+                # 处理相对URL
+                for url in script_urls:
+                    if url:
+                        absolute_url = urljoin(base_url, url)
+                        if self._is_supported_file(absolute_url):
+                            file_urls.add(absolute_url)
+            except Exception as e:
+                self.logger.warning(f"提取script标签时出错: {e}")
+            
+            # 检查页面是否仍然有效
+            if page.is_closed():
+                self.logger.warning("页面在提取script标签后被关闭")
+                return file_urls
             
             # 监听网络请求中的JS和MAP文件
-            network_files = await page.evaluate("""
-                () => {
-                    return window.jsFiles || [];
-                }
-            """)
-            
-            for url in network_files:
-                if url:
-                    absolute_url = urljoin(base_url, url)
-                    if self._is_supported_file(absolute_url):
-                        file_urls.add(absolute_url)
+            try:
+                network_files = await page.evaluate("""
+                    () => {
+                        try {
+                            return window.jsFiles || [];
+                        } catch(e) {
+                            return [];
+                        }
+                    }
+                """)
+                
+                for url in network_files:
+                    if url:
+                        absolute_url = urljoin(base_url, url)
+                        if self._is_supported_file(absolute_url):
+                            file_urls.add(absolute_url)
+            except Exception as e:
+                self.logger.warning(f"提取网络文件时出错: {e}")
                         
         except Exception as e:
             self.logger.warning(f"提取文件时出错: {e}")
@@ -498,14 +536,36 @@ class PlaywrightCrawler:
             response = await page.goto(url, timeout=10000)
             
             if response and response.status == 200:
-                content = await response.text()
+                # 检查Content-Type，确保是文本文件
+                content_type = response.headers.get('content-type', '').lower()
                 
-                # 生成文件路径
-                file_path = generate_file_path(url, self.target_url, 'dynamic')
-                
-                # 保存文件
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(content)
+                # 只处理文本类型的文件
+                if ('text' in content_type or 
+                    'javascript' in content_type or 
+                    'json' in content_type or
+                    'application/javascript' in content_type or
+                    'application/x-javascript' in content_type):
+                    
+                    try:
+                        content = await response.text()
+                        
+                        # 生成文件路径
+                        file_path = generate_file_path(url, self.target_url, 'dynamic')
+                        
+                        # 保存文件
+                        with open(file_path, 'w', encoding='utf-8') as f:
+                            f.write(content)
+                    except UnicodeDecodeError as e:
+                        self.logger.error(f"UTF-8解码失败 {url}: {e}")
+                        self.stats['js_files_failed'] += 1
+                        await page.close()
+                        return None
+                else:
+                    # 非文本文件，跳过下载
+                    self.logger.warning(f"跳过非文本文件 {url} (Content-Type: {content_type})")
+                    self.stats['js_files_failed'] += 1
+                    await page.close()
+                    return None
                 
                 # 转换编码为UTF-8
                 convert_to_utf8(file_path)
@@ -572,21 +632,29 @@ class PlaywrightCrawler:
             await asyncio.sleep(1)
             
             # 触发可能的动态加载
-            await page.evaluate("""
-                () => {
-                    // 滚动页面触发懒加载
-                    window.scrollTo(0, document.body.scrollHeight);
-                    
-                    // 触发常见的事件
-                    ['click', 'mouseover', 'focus'].forEach(eventType => {
-                        document.querySelectorAll('button, a, input').forEach(el => {
+            try:
+                if not page.is_closed():
+                    await page.evaluate("""
+                        () => {
                             try {
-                                el.dispatchEvent(new Event(eventType, {bubbles: true}));
-                            } catch(e) {}
-                        });
-                    });
-                }
-            """)
+                                // 滚动页面触发懒加载
+                                window.scrollTo(0, document.body.scrollHeight);
+                                
+                                // 触发常见的事件
+                                ['click', 'mouseover', 'focus'].forEach(eventType => {
+                                    document.querySelectorAll('button, a, input').forEach(el => {
+                                        try {
+                                            el.dispatchEvent(new Event(eventType, {bubbles: true}));
+                                        } catch(e) {}
+                                    });
+                                });
+                            } catch(e) {
+                                console.log('触发动态加载时出错:', e);
+                            }
+                        }
+                    """)
+            except Exception as e:
+                self.logger.warning(f"触发动态加载时出错: {e}")
             
             # 再次短暂等待
             await asyncio.sleep(1)
@@ -603,17 +671,22 @@ class PlaywrightCrawler:
             # 提取页面链接（用于深度爬取）
             if depth < self.max_depth:
                 try:
-                    page_links = await page.evaluate("""
-                        () => {
-                            const links = Array.from(document.querySelectorAll('a[href]'));
-                            return links.map(link => link.href).filter(href => href);
-                        }
-                    """)
-                    
-                    base_domain = urlparse(url).netloc
-                    for link in page_links:
-                        if link and urlparse(link).netloc == base_domain:
-                            links.add(link)
+                    if not page.is_closed():
+                        page_links = await page.evaluate("""
+                            () => {
+                                try {
+                                    const links = Array.from(document.querySelectorAll('a[href]'));
+                                    return links.map(link => link.href).filter(href => href);
+                                } catch(e) {
+                                    return [];
+                                }
+                            }
+                        """)
+                        
+                        base_domain = urlparse(url).netloc
+                        for link in page_links:
+                            if link and urlparse(link).netloc == base_domain:
+                                links.add(link)
                             
                 except Exception as e:
                     self.logger.warning(f"提取链接时出错: {e}")
@@ -658,12 +731,8 @@ class PlaywrightCrawler:
             to_visit = [(start_url, 0)]
             all_js_files = set()
             
-            # 估算总页面数（基于深度）
-            estimated_pages = min(100, sum(10 ** i for i in range(self.max_depth + 1)))
-            
-            # 创建页面访问进度条
+            # 创建页面访问进度条（不设置total，避免显示None）
             page_progress = tqdm(
-                total=estimated_pages,
                 desc="🌐 页面爬取",
                 unit="页面",
                 dynamic_ncols=True,
@@ -671,7 +740,7 @@ class PlaywrightCrawler:
                 position=0,
                 leave=False,
                 ncols=100,
-                bar_format='{desc}: {percentage:3.0f}%|{bar}| {n}/{total} [{elapsed}<{remaining}, {postfix}]'
+                bar_format='{desc}: {n} 页面 [{elapsed}, {postfix}]'
             )
             
             while to_visit:

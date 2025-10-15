@@ -22,6 +22,7 @@ BASE_CONFIG = {
     'base_output_dir': 'output',  # 基础输出目录
     'original_dir': 'encode',      # 原始文件目录
     'decrypted_dir': 'decode',     # 反混淆后文件目录
+    'similarity_dir': 'similarity',  # 相似度分析结果目录
     'logs_dir': 'logs',
     'checkpoints_dir': 'checkpoints',
 }
@@ -112,6 +113,7 @@ def get_directory_structure(target_url):
         'target_output_dir': target_output_dir,
         'original_dir': target_output_dir / BASE_CONFIG['original_dir'],
         'decrypted_dir': target_output_dir / BASE_CONFIG['decrypted_dir'],
+        'similarity_dir': target_output_dir / BASE_CONFIG['similarity_dir'],
         # 为了向后兼容，保留这些别名
         'static_original_dir': target_output_dir / BASE_CONFIG['original_dir'],
         'dynamic_original_dir': target_output_dir / BASE_CONFIG['original_dir'],
@@ -130,6 +132,7 @@ def ensure_directories(target_url=None):
             dirs['target_output_dir'],
             dirs['original_dir'],
             dirs['decrypted_dir'],
+            dirs['similarity_dir'],
             dirs['logs_dir'],
             dirs['checkpoints_dir'],
         ]

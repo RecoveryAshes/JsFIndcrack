@@ -441,44 +441,33 @@ class ParallelDeduplicationProcessor:
         # 复制唯一文件
         unique_files = [f for f in all_files if f not in all_duplicates]
         for file_path in unique_files:
-            filename = os.path.basename(file_path)
-            dest_path = os.path.join(unique_dir, filename)
-            self._copy_file(file_path, dest_path)
+            self._copy_file_with_structure(file_path, input_dir, unique_dir)
             # 新增：同时复制到合并目录
-            merged_dest_path = os.path.join(merged_dir, filename)
-            self._copy_file(file_path, merged_dest_path)
+            self._copy_file_with_structure(file_path, input_dir, merged_dir)
         
         # 处理完全相同的文件组
         for i, group in enumerate(exact_groups):
             group_dir = os.path.join(exact_duplicates_dir, f'exact_group_{i+1}')
             os.makedirs(group_dir, exist_ok=True)
             for file_path in group:
-                filename = os.path.basename(file_path)
-                dest_path = os.path.join(group_dir, filename)
-                self._copy_file(file_path, dest_path)
+                self._copy_file_with_structure(file_path, input_dir, group_dir)
             
             # 新增：将每组的第一个文件（代表文件）复制到合并目录
             if group:
                 representative_file = group[0]
-                filename = os.path.basename(representative_file)
-                merged_dest_path = os.path.join(merged_dir, filename)
-                self._copy_file(representative_file, merged_dest_path)
+                self._copy_file_with_structure(representative_file, input_dir, merged_dir)
         
         # 处理相似文件组
         for i, group in enumerate(similar_groups):
             group_dir = os.path.join(similar_dir, f'similar_group_{i+1}')
             os.makedirs(group_dir, exist_ok=True)
             for file_path in group:
-                filename = os.path.basename(file_path)
-                dest_path = os.path.join(group_dir, filename)
-                self._copy_file(file_path, dest_path)
+                self._copy_file_with_structure(file_path, input_dir, group_dir)
             
             # 新增：将每组的第一个文件（代表文件）复制到合并目录
             if group:
                 representative_file = group[0]
-                filename = os.path.basename(representative_file)
-                merged_dest_path = os.path.join(merged_dir, filename)
-                self._copy_file(representative_file, merged_dest_path)
+                self._copy_file_with_structure(representative_file, input_dir, merged_dir)
         
         # 生成详细报告
         report = {
@@ -519,6 +508,20 @@ class ParallelDeduplicationProcessor:
                     f.write(content)
             except Exception as e:
                 print(f"复制文件失败 {src} -> {dest}: {e}")
+    
+    def _copy_file_with_structure(self, src: str, input_dir: str, output_dir: str):
+        """复制文件并保持原有的目录结构"""
+        # 计算相对路径
+        rel_path = os.path.relpath(src, input_dir)
+        dest_path = os.path.join(output_dir, rel_path)
+        
+        # 确保目标目录存在
+        dest_dir = os.path.dirname(dest_path)
+        os.makedirs(dest_dir, exist_ok=True)
+        
+        # 复制文件
+        self._copy_file(src, dest_path)
+        return dest_path
 
 
 if __name__ == "__main__":

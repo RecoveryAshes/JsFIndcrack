@@ -50,9 +50,24 @@ def is_javascript_file(url: str) -> bool:
         if path.endswith(ext):
             return True
     
-    # 检查Content-Type（如果可用）
-    if 'javascript' in path or 'js' in path:
-        return True
+    # 检查是否明确包含JavaScript相关的路径段（更严格的检查）
+    path_segments = path.split('/')
+    filename = path_segments[-1] if path_segments else ''
+    
+    # 只有当文件名本身包含javascript或js，且不是其他文件类型时才认为是JS文件
+    if filename:
+        # 排除明显的非JS文件扩展名
+        non_js_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.css', '.html', '.htm', '.xml', '.json', '.txt']
+        for non_ext in non_js_extensions:
+            if filename.endswith(non_ext):
+                return False
+        
+        # 检查文件名是否明确表示是JavaScript文件
+        if (filename.endswith('.js') or 
+            filename.endswith('.mjs') or 
+            filename.endswith('.jsx') or
+            'javascript' in filename):
+            return True
     
     return False
 
@@ -84,9 +99,75 @@ def get_file_type(url: str) -> str:
     else:
         return 'unknown'
 
+def is_external_domain(js_url: str, target_url: str) -> bool:
+    """
+    判断JS文件URL是否来自外部域名
+    
+    Args:
+        js_url: JavaScript文件的URL
+        target_url: 目标网站的URL
+    
+    Returns:
+        bool: 如果是外部域名返回True，否则返回False
+    """
+    try:
+        js_parsed = urlparse(js_url)
+        target_parsed = urlparse(target_url)
+        
+        # 获取域名（netloc）
+        js_domain = js_parsed.netloc.lower()
+        target_domain = target_parsed.netloc.lower()
+        
+        # 移除www前缀进行比较
+        js_domain = re.sub(r'^www\.', '', js_domain)
+        target_domain = re.sub(r'^www\.', '', target_domain)
+        
+        # 如果JS文件没有域名（相对路径），则认为是内部文件
+        if not js_domain:
+            return False
+            
+        # 比较域名是否不同
+        return js_domain != target_domain
+        
+    except Exception as e:
+        logger.warning(f"判断外部域名时出错: {e}")
+        return False
+
+def get_domain_from_url(url: str) -> str:
+    """
+    从URL中提取域名并清理
+    
+    Args:
+        url: URL字符串
+    
+    Returns:
+        str: 清理后的域名
+    """
+    try:
+        parsed = urlparse(url)
+        domain = parsed.netloc.lower()
+        
+        # 移除www前缀
+        domain = re.sub(r'^www\.', '', domain)
+        
+        # 清理域名，移除不合法的文件名字符
+        clean_domain = re.sub(r'[<>:"/\\|?*]', '_', domain)
+        clean_domain = clean_domain.strip('.')
+        
+        # 如果域名为空，使用默认名称
+        if not clean_domain:
+            clean_domain = 'unknown_domain'
+            
+        return clean_domain
+        
+    except Exception as e:
+        logger.warning(f"提取域名时出错: {e}")
+        return 'unknown_domain'
+
 def generate_unique_file_path(url: str, target_url: str, file_type: str = "static", existing_files: set = None) -> Path:
     """
     根据URL生成唯一的文件保存路径，避免文件名冲突
+    支持为所有域名JS文件创建以域名命名的单独目录
     
     Args:
         url: JavaScript文件的URL
@@ -108,16 +189,32 @@ def generate_unique_file_path(url: str, target_url: str, file_type: str = "stati
     
     # 如果没有文件名，生成一个
     if not filename or not filename.endswith('.js'):
-        filename = f"{calculate_file_hash(url)}.js"
+        filename = f"{calculate_url_hash(url)}.js"
     
     # 清理文件名
     filename = sanitize_filename(filename)
     
-    # 确定保存目录
+    # 确定基础保存目录
     if file_type == "static":
-        save_dir = dirs['static_original_dir']
+        base_save_dir = dirs['static_original_dir']
     else:
-        save_dir = dirs['dynamic_original_dir']
+        base_save_dir = dirs['dynamic_original_dir']
+    
+    # 为所有JS文件创建以域名命名的子目录
+    if is_external_domain(url, target_url):
+        # 外部域名
+        domain = get_domain_from_url(url)
+    else:
+        # 目标域名
+        domain = get_domain_from_url(target_url)
+    
+    # 创建域名子目录
+    save_dir = base_save_dir / domain
+    
+    # 确保域名目录存在
+    save_dir.mkdir(parents=True, exist_ok=True)
+    
+    logger.info(f"JS文件将保存到域名目录: {save_dir}")
     
     # 处理文件名冲突
     base_path = save_dir / filename
@@ -174,6 +271,16 @@ def calculate_content_hash(content: bytes) -> str:
         logger.error(f"计算内容哈希失败: {e}")
         return ""
 
+def calculate_url_hash(url: str) -> str:
+    """计算URL的MD5哈希值，用于生成文件名"""
+    try:
+        hash_md5 = hashlib.md5()
+        hash_md5.update(url.encode('utf-8'))
+        return hash_md5.hexdigest()[:8]  # 只取前8位，避免文件名过长
+    except Exception as e:
+        logger.error(f"计算URL哈希失败 {url}: {e}")
+        return "unknown"
+
 def is_duplicate_content(content: bytes, existing_hashes: set) -> bool:
     """检查内容是否重复"""
     content_hash = calculate_content_hash(content)
@@ -186,6 +293,7 @@ def get_content_hash(content: bytes) -> str:
 def is_file_already_downloaded(url: str, target_url: str, file_type: str = "static") -> bool:
     """
     检查文件是否已经下载过（基于文件名）
+    支持所有域名目录的文件检查
     
     Args:
         url: JavaScript文件的URL
@@ -207,16 +315,27 @@ def is_file_already_downloaded(url: str, target_url: str, file_type: str = "stat
         
         # 如果没有文件名，生成一个
         if not filename or not filename.endswith('.js'):
-            filename = f"{calculate_file_hash(url)}.js"
+            filename = f"{calculate_url_hash(url)}.js"
         
         # 清理文件名
         filename = sanitize_filename(filename)
         
-        # 确定保存目录
+        # 确定基础保存目录
         if file_type == "static":
-            save_dir = dirs['static_original_dir']
+            base_save_dir = dirs['static_original_dir']
         else:
-            save_dir = dirs['dynamic_original_dir']
+            base_save_dir = dirs['dynamic_original_dir']
+        
+        # 为所有JS文件确定域名子目录
+        if is_external_domain(url, target_url):
+            # 外部域名
+            domain = get_domain_from_url(url)
+        else:
+            # 目标域名
+            domain = get_domain_from_url(target_url)
+        
+        # 构建域名子目录路径
+        save_dir = base_save_dir / domain
         
         # 检查文件是否存在
         file_path = save_dir / filename
@@ -227,34 +346,86 @@ def is_file_already_downloaded(url: str, target_url: str, file_type: str = "stat
         return False
 
 def detect_encoding(file_path: Path) -> str:
-    """检测文件编码"""
+    """检测文件编码，使用多种方法确保准确性"""
     try:
         with open(file_path, 'rb') as f:
             raw_data = f.read()
-            result = chardet.detect(raw_data)
-            return result['encoding'] or 'utf-8'
+            
+        # 首先尝试chardet检测
+        result = chardet.detect(raw_data)
+        detected_encoding = result['encoding']
+        confidence = result['confidence']
+        
+        # 如果置信度太低，尝试常见编码
+        if not detected_encoding or confidence < 0.7:
+            common_encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'iso-8859-1']
+            for encoding in common_encodings:
+                try:
+                    raw_data.decode(encoding)
+                    logger.debug(f"使用回退编码 {encoding} 检测文件: {file_path}")
+                    return encoding
+                except UnicodeDecodeError:
+                    continue
+        
+        return detected_encoding or 'utf-8'
+        
     except Exception as e:
         logger.error(f"检测文件编码失败 {file_path}: {e}")
         return 'utf-8'
 
 def convert_to_utf8(file_path: Path) -> bool:
-    """将文件转换为UTF-8编码"""
+    """将文件转换为UTF-8编码，使用多种编码回退机制"""
     try:
         # 检测原始编码
         original_encoding = detect_encoding(file_path)
         
-        if original_encoding.lower() == 'utf-8':
-            return True
+        # 如果已经是UTF-8，检查文件是否可以正常读取
+        if original_encoding.lower() in ['utf-8', 'utf-8-sig']:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    f.read()
+                return True
+            except UnicodeDecodeError:
+                # UTF-8检测错误，继续尝试其他编码
+                pass
         
-        # 读取原始内容
-        with open(file_path, 'r', encoding=original_encoding) as f:
-            content = f.read()
+        # 尝试多种编码读取文件
+        encodings_to_try = [original_encoding, 'utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'iso-8859-1']
+        content = None
+        successful_encoding = None
         
-        # 写入UTF-8格式
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(content)
+        for encoding in encodings_to_try:
+            if not encoding:
+                continue
+            try:
+                with open(file_path, 'r', encoding=encoding, errors='strict') as f:
+                    content = f.read()
+                successful_encoding = encoding
+                break
+            except (UnicodeDecodeError, LookupError):
+                continue
         
-        logger.info(f"文件编码转换成功: {file_path} ({original_encoding} -> UTF-8)")
+        # 如果所有编码都失败，使用errors='replace'读取
+        if content is None:
+            try:
+                with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                    content = f.read()
+                successful_encoding = 'utf-8 (with errors replaced)'
+                logger.warning(f"使用错误替换模式读取文件: {file_path}")
+            except Exception as e:
+                logger.error(f"无法读取文件 {file_path}: {e}")
+                return False
+        
+        # 如果成功读取且不是UTF-8，则转换为UTF-8
+        if successful_encoding and not successful_encoding.lower().startswith('utf-8'):
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                logger.info(f"文件编码转换成功: {file_path} ({successful_encoding} -> UTF-8)")
+            except Exception as e:
+                logger.error(f"写入UTF-8文件失败 {file_path}: {e}")
+                return False
+        
         return True
         
     except Exception as e:

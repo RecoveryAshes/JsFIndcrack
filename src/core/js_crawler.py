@@ -205,7 +205,7 @@ class JSCrawlerManager:
                 'failed_files': []
             }
     
-    def crawl_dynamic_js(self, url: str, wait_time: int = 10, playwright_tabs: int = 4, headless: bool = True, resume: bool = False) -> Dict[str, Any]:
+    def crawl_dynamic_js(self, url: str, max_depth: int = 2, wait_time: int = 10, playwright_tabs: int = 4, headless: bool = True, resume: bool = False) -> Dict[str, Any]:
         """爬取动态JavaScript文件"""
         _get_logger().info("=" * 60)
         _get_logger().info("开始动态JavaScript文件爬取")
@@ -223,7 +223,7 @@ class JSCrawlerManager:
             # 根据配置选择爬取方式
             if USE_EMBEDDED_BROWSER and PLAYWRIGHT_AVAILABLE:
                 _get_logger().info(f"使用Playwright进行动态爬取，最大标签页数: {playwright_tabs}，无头模式: {headless}")
-                results = self._crawl_with_playwright(url, wait_time, playwright_tabs, headless, existing_file_hashes)
+                results = self._crawl_with_playwright(url, max_depth, wait_time, playwright_tabs, headless, existing_file_hashes)
             else:
                 # 使用传统Selenium方式
                 _get_logger().info("使用传统Selenium进行动态爬取")
@@ -272,7 +272,7 @@ class JSCrawlerManager:
                 'failed_files': []
             }
     
-    def _crawl_with_playwright(self, url: str, wait_time: int = 10, playwright_tabs: int = 4, headless: bool = True, existing_file_hashes: Dict[str, str] = None) -> Dict[str, Any]:
+    def _crawl_with_playwright(self, url: str, max_depth: int = 2, wait_time: int = 10, playwright_tabs: int = 4, headless: bool = True, existing_file_hashes: Dict[str, str] = None) -> Dict[str, Any]:
         """使用Playwright进行动态爬取"""
         import asyncio
         from .config import PLAYWRIGHT_BROWSER
@@ -280,7 +280,7 @@ class JSCrawlerManager:
         async def async_crawl():
             async with PlaywrightCrawler(
                 target_url=url,
-                max_depth=2, 
+                max_depth=max_depth, 
                 wait_time=wait_time,
                 max_workers=playwright_tabs,  # 传递Playwright标签页数量控制参数
                 browser_type=PLAYWRIGHT_BROWSER,
@@ -317,7 +317,7 @@ class JSCrawlerManager:
             
             # 检查decode目录是否存在
             decode_dir = self.dirs['decrypted_dir']
-            if not decode_dir.exists() or not any(decode_dir.glob('*.js')):
+            if not decode_dir.exists() or not any(decode_dir.rglob('*.js')):
                 _get_logger().warning("未找到反编译文件，跳过相似度分析")
                 return {
                     'success': True,
@@ -329,9 +329,8 @@ class JSCrawlerManager:
                     'output_dir': None
                 }
             
-            # 创建输出目录
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            similarity_output_dir = self.dirs['target_output_dir'] / f'similarity_analysis_{timestamp}'
+            # 创建输出目录 - 使用标准的similarity目录结构
+            similarity_output_dir = self.dirs['similarity_dir']
             
             # 创建并运行相似度分析器
             processor = ParallelDeduplicationProcessor(
@@ -592,9 +591,9 @@ class JSCrawlerManager:
                 # 如果静态爬取失败，强制执行动态爬取
                 if static_failed_anti_crawler:
                     _get_logger().info("由于检测到反爬虫机制，将强制执行动态爬取")
-                    dynamic_results = self.crawl_dynamic_js(url, wait_time, playwright_tabs, headless, resume=False)  # 不跳过动态爬取
+                    dynamic_results = self.crawl_dynamic_js(url, max_depth, wait_time, playwright_tabs, headless, resume=False)  # 不跳过动态爬取
                 else:
-                    dynamic_results = self.crawl_dynamic_js(url, wait_time, playwright_tabs, headless, resume)
+                    dynamic_results = self.crawl_dynamic_js(url, max_depth, wait_time, playwright_tabs, headless, resume)
             
             # 步骤3: 反混淆（如果有文件需要处理）
             deobfuscation_results = {}
