@@ -21,10 +21,13 @@ class CrawlReportGenerator:
             target_dir: 目标输出目录
         """
         self.target_dir = Path(target_dir)
+        self.logs_dir = self.target_dir / 'logs'
         self.start_time = datetime.now()
         self.success_files = []
         self.failed_files = []
         self.detailed_logs = []
+        self.error_logs = []
+        self.debug_logs = []
         
     def add_success_file(self, file_info: Dict[str, Any]):
         """
@@ -56,12 +59,29 @@ class CrawlReportGenerator:
             message: 日志消息
             level: 日志级别
         """
-        self._add_detailed_log(f"{level}: {message}")
+        formatted_message = f"{level}: {message}"
+        self._add_detailed_log(formatted_message)
+        
+        # 根据日志级别分类保存
+        if level.upper() == "ERROR":
+            self._add_error_log(formatted_message)
+        elif level.upper() == "DEBUG":
+            self._add_debug_log(formatted_message)
         
     def _add_detailed_log(self, message: str):
         """添加详细日志条目"""
         timestamp = datetime.now().isoformat()
         self.detailed_logs.append(f"[{timestamp}] {message}")
+        
+    def _add_error_log(self, message: str):
+        """添加错误日志条目"""
+        timestamp = datetime.now().isoformat()
+        self.error_logs.append(f"[{timestamp}] {message}")
+        
+    def _add_debug_log(self, message: str):
+        """添加调试日志条目"""
+        timestamp = datetime.now().isoformat()
+        self.debug_logs.append(f"[{timestamp}] {message}")
         
     def generate_summary_report(self) -> Dict[str, Any]:
         """生成摘要报告"""
@@ -212,6 +232,9 @@ class CrawlReportGenerator:
         # 保存详细日志
         self._save_detailed_log()
         
+        # 保存分类日志
+        self._save_categorized_logs()
+        
     def _save_json_report(self, filename: str, data: Dict[str, Any]):
         """保存JSON格式的报告"""
         file_path = self.target_dir / filename
@@ -223,13 +246,76 @@ class CrawlReportGenerator:
             
     def _save_detailed_log(self):
         """保存详细日志文件"""
-        file_path = self.target_dir / REPORT_CONFIG['detailed_log']
+        # 保存到主目录（保持向后兼容）
+        main_log_path = self.target_dir / REPORT_CONFIG['detailed_log']
         try:
-            with open(file_path, 'w', encoding='utf-8') as f:
+            with open(main_log_path, 'w', encoding='utf-8') as f:
                 f.write('\n'.join(self.detailed_logs))
         except Exception as e:
-            print(f"保存详细日志失败: {e}")
+            print(f"保存主目录详细日志失败: {e}")
+        
+        # 保存到logs目录
+        self.logs_dir.mkdir(parents=True, exist_ok=True)
+        logs_file_path = self.logs_dir / REPORT_CONFIG['detailed_log']
+        try:
+            with open(logs_file_path, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(self.detailed_logs))
+        except Exception as e:
+            print(f"保存logs目录详细日志失败: {e}")
             
+        # 同时保存一个带时间戳的日志文件到logs目录
+        timestamp = self.start_time.strftime('%Y%m%d_%H%M%S')
+        timestamped_log_path = self.logs_dir / f"crawl_log_{timestamp}.txt"
+        try:
+            with open(timestamped_log_path, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(self.detailed_logs))
+        except Exception as e:
+             print(f"保存时间戳日志失败: {e}")
+             
+    def _save_categorized_logs(self):
+        """保存分类日志文件到logs目录"""
+        # 确保logs目录存在
+        self.logs_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 保存错误日志
+        error_log_path = self.logs_dir / REPORT_CONFIG['error_log']
+        try:
+            with open(error_log_path, 'w', encoding='utf-8') as f:
+                if self.error_logs:
+                    f.write('\n'.join(self.error_logs))
+                else:
+                    f.write("# 本次会话无错误日志\n")
+        except Exception as e:
+            print(f"保存错误日志失败: {e}")
+        
+        # 保存调试日志
+        debug_log_path = self.logs_dir / REPORT_CONFIG['debug_log']
+        try:
+            with open(debug_log_path, 'w', encoding='utf-8') as f:
+                if self.debug_logs:
+                    f.write('\n'.join(self.debug_logs))
+                else:
+                    f.write("# 本次会话无调试日志\n")
+        except Exception as e:
+            print(f"保存调试日志失败: {e}")
+                
+        # 保存综合日志统计信息
+        log_summary_path = self.logs_dir / 'log_summary.json'
+        try:
+            summary = {
+                'session_start': self.start_time.isoformat(),
+                'session_end': datetime.now().isoformat(),
+                'total_logs': len(self.detailed_logs),
+                'error_logs': len(self.error_logs),
+                'debug_logs': len(self.debug_logs),
+                'success_files': len(self.success_files),
+                'failed_files': len(self.failed_files)
+            }
+            with open(log_summary_path, 'w', encoding='utf-8') as f:
+                json.dump(summary, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"保存日志统计失败: {e}")
+             
     def print_summary(self):
         """打印爬取摘要到控制台"""
         summary = self.generate_summary_report()['crawl_summary']

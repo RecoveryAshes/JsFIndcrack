@@ -21,7 +21,7 @@ try:
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
 
-from ..utils.utils import is_supported_file, generate_file_path, convert_to_utf8, format_file_size, get_content_hash, is_duplicate_content
+from ..utils.utils import is_supported_file, generate_file_path, convert_to_utf8, format_file_size, get_content_hash, is_duplicate_content, is_file_already_downloaded
 from ..utils.logger import get_logger
 
 
@@ -185,6 +185,14 @@ class PlaywrightCrawler:
     async def _download_js_with_tab_control(self, url: str, output_dir: Path) -> Optional[Dict]:
         """使用标签页控制下载JavaScript文件"""
         if url in self.completed_downloads:
+            return None
+        
+        # 检查文件是否已存在（基于文件名）
+        if is_file_already_downloaded(url, self.target_url, 'dynamic'):
+            parsed_url = urlparse(url)
+            filename = Path(parsed_url.path).name or 'script.js'
+            self.logger.info(f"跳过已存在文件: {filename}")
+            self.completed_downloads.add(url)
             return None
             
         async with self.page_semaphore:  # 控制同时打开的标签页数量

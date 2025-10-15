@@ -22,7 +22,7 @@ from ..core.config import (
 )
 from ..utils.utils import (
     is_valid_url, normalize_url, is_supported_file,
-    generate_file_path, format_file_size, convert_to_utf8
+    generate_file_path, format_file_size, convert_to_utf8, get_content_hash
 )
 from ..utils.logger import get_logger
 from ..utils.report_generator import CrawlReportGenerator
@@ -32,7 +32,7 @@ logger = get_logger("dynamic_crawler")
 class DynamicJSCrawler:
     """动态JavaScript和Source Map文件捕获器"""
     
-    def __init__(self, target_url: str = None, output_dir: Path = None):
+    def __init__(self, target_url: str = None, output_dir: Path = None, existing_file_hashes: Dict[str, str] = None):
         self.target_url = target_url
         self.output_dir = output_dir or ORIGINAL_DIR
         self.driver: Optional[webdriver.Chrome] = None
@@ -40,6 +40,22 @@ class DynamicJSCrawler:
         self.downloaded_files: List[Dict[str, Any]] = []
         self.failed_downloads: List[Dict[str, Any]] = []
         self.js_urls: Set[str] = set()
+        
+        # 去重机制
+        self.content_hashes: Set[str] = set()  # 存储已下载文件的内容哈希
+        self.hash_to_filename: Dict[str, str] = {}  # 哈希值到文件名的映射
+        self.duplicate_count = 0  # 重复文件计数
+        self.cross_mode_duplicate_count = 0  # 跨模式重复文件计数
+        self.processed_urls = set()  # 已处理的URL集合
+        self.existing_filenames = set()  # 已存在的文件名集合
+        
+        # 初始化已有文件哈希（用于跨模式去重）
+        self.static_file_hashes = set()  # 存储来自静态爬取的文件哈希
+        if existing_file_hashes:
+            self.content_hashes.update(existing_file_hashes.keys())
+            self.hash_to_filename.update(existing_file_hashes)
+            self.static_file_hashes.update(existing_file_hashes.keys())
+            logger.info(f"动态爬虫加载了 {len(existing_file_hashes)} 个已有文件哈希，用于跨模式去重")
         
         # 初始化报告生成器
         self.report_generator = CrawlReportGenerator(self.output_dir)
@@ -334,8 +350,23 @@ class DynamicJSCrawler:
         """下载JavaScript和Source Map文件"""
         start_time = time.time()
         try:
+            # 检查URL是否已处理
+            if url in self.processed_urls:
+                logger.info(f"跳过已处理的URL: {url}")
+                return False
+            
+            # 检查文件是否已经存在（基于文件名）
+            from ..utils.utils import is_file_already_downloaded
+            if is_file_already_downloaded(url, self.target_url, "dynamic"):
+                logger.info(f"跳过已存在的动态文件: {url}")
+                self.processed_urls.add(url)
+                return False
+            
             logger.info(f"正在下载动态文件: {url}")
             self.report_generator.add_log(f"开始下载动态文件: {url}")
+            
+            # 标记URL为已处理
+            self.processed_urls.add(url)
             
             # 使用requests下载文件
             session = requests.Session()
@@ -367,8 +398,30 @@ class DynamicJSCrawler:
             response = session.get(url, timeout=30)
             response.raise_for_status()
             
-            # 生成本地文件路径
-            file_path = generate_file_path(url, self.target_url, 'dynamic')
+            # 检查内容是否重复
+            content_hash = get_content_hash(response.content)
+            if content_hash in self.content_hashes:
+                existing_filename = self.hash_to_filename.get(content_hash, "未知文件")
+                
+                # 判断是跨模式去重还是模式内去重
+                is_cross_mode = content_hash in self.static_file_hashes
+                
+                if is_cross_mode:
+                    logger.info(f"跳过跨模式重复文件: {url} (与静态爬取的 {existing_filename} 内容相同)")
+                    self.report_generator.add_log(f"跳过跨模式重复文件: {url} (与静态爬取的 {existing_filename} 内容相同)")
+                    self.cross_mode_duplicate_count += 1
+                else:
+                    logger.info(f"跳过重复文件: {url} (与 {existing_filename} 内容相同)")
+                    self.report_generator.add_log(f"跳过重复文件: {url} (与 {existing_filename} 内容相同)")
+                    self.duplicate_count += 1
+                return False
+            
+            # 生成本地文件路径（避免文件名冲突）
+            from ..utils.utils import generate_unique_file_path
+            file_path = generate_unique_file_path(url, self.target_url, 'dynamic', self.existing_filenames)
+            
+            # 记录文件名
+            self.existing_filenames.add(file_path.name)
             
             # 确保目录存在
             file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -379,6 +432,10 @@ class DynamicJSCrawler:
             
             # 转换编码
             convert_to_utf8(file_path)
+            
+            # 更新去重信息
+            self.content_hashes.add(content_hash)
+            self.hash_to_filename[content_hash] = file_path.name
             
             download_time = time.time() - start_time
             
@@ -462,17 +519,19 @@ class DynamicJSCrawler:
                     time.sleep(1)  # 避免请求过快
             
             # 生成并保存报告
-            self.report_generator.add_log(f"动态爬取完成，发现 {len(self.js_urls)} 个文件，成功下载 {len(self.downloaded_files)} 个")
+            self.report_generator.add_log(f"动态爬取完成，发现 {len(self.js_urls)} 个文件，成功下载 {len(self.downloaded_files)} 个，跳过重复文件 {self.duplicate_count} 个")
             self.report_generator.save_all_reports()
             
             # 打印报告摘要
-            summary = self.report_generator.get_summary()
-            logger.info(f"动态爬取报告摘要: {summary}")
+            summary = self.report_generator.generate_summary_report()
+            logger.info(f"动态爬取报告摘要: {summary['crawl_summary']}")
             
             return {
                 'total_discovered': len(self.js_urls),
                 'successful_downloads': len(self.downloaded_files),
                 'failed_downloads': len(self.failed_downloads),
+                'duplicate_files': self.duplicate_count,
+                'cross_mode_duplicated_files': self.cross_mode_duplicate_count,
                 'downloaded_files': self.downloaded_files,
                 'failed_files': self.failed_downloads
             }
@@ -506,6 +565,7 @@ class DynamicJSCrawler:
             'discovered_urls': len(self.js_urls),
             'downloaded_files': len(self.downloaded_files),
             'failed_downloads': len(self.failed_downloads),
+            'duplicate_files': self.duplicate_count,
             'total_size': total_size,
             'success_rate': len(self.downloaded_files) / len(self.js_urls) * 100 if self.js_urls else 0
         }

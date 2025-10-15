@@ -68,6 +68,8 @@ REPORT_CONFIG = {
     'failed_report': 'failed_files.json',     # 失败文件列表
     'summary_report': 'crawl_summary.json',   # 爬取摘要报告
     'detailed_log': 'detailed_log.txt',       # 详细日志文件
+    'error_log': 'error.log',                 # 错误日志文件
+    'debug_log': 'debug.log',                 # 调试日志文件
 }
 
 def get_target_output_dir(url):

@@ -22,7 +22,7 @@ from ..core.config import (
 )
 from ..utils.utils import (
     is_valid_url, normalize_url, is_supported_file, 
-    generate_file_path, convert_to_utf8
+    generate_file_path, convert_to_utf8, get_content_hash
 )
 from ..utils.logger import get_logger
 from ..utils.report_generator import CrawlReportGenerator
@@ -47,6 +47,13 @@ class StaticJSCrawler:
         self.download_queue = queue.Queue()
         self.download_lock = threading.Lock()
         self.download_executor = None
+        
+        # 去重机制
+        self.content_hashes: Set[str] = set()  # 存储已下载文件的内容哈希
+        self.hash_to_filename: Dict[str, str] = {}  # 哈希值到文件名的映射
+        self.duplicate_count = 0  # 重复文件计数
+        self.processed_urls = set()  # 已处理的URL集合
+        self.existing_filenames = set()  # 已存在的文件名集合
         
         # 初始化报告生成器
         self.report_generator = CrawlReportGenerator(self.output_dir)
@@ -152,14 +159,29 @@ class StaticJSCrawler:
             logger.error(f"分析页面失败 {url}: {e}")
             raise  # 重新抛出异常，让上层处理
         
-        return js_urls
+        return file_urls
     
     def download_file(self, url: str) -> bool:
         """下载单个JavaScript或Source Map文件"""
         start_time = time.time()
         try:
+            # 检查URL是否已处理
+            if url in self.processed_urls:
+                logger.info(f"跳过已处理的URL: {url}")
+                return False
+            
+            # 检查文件是否已经存在（基于文件名）
+            from ..utils.utils import is_file_already_downloaded
+            if is_file_already_downloaded(url, self.start_url, "static"):
+                logger.info(f"跳过已存在的文件: {url}")
+                self.processed_urls.add(url)
+                return False
+            
             logger.info(f"正在下载: {url}")
             self.report_generator.add_log(f"开始下载: {url}")
+            
+            # 标记URL为已处理
+            self.processed_urls.add(url)
             
             # 检查文件大小
             head_response = self.session.head(url, timeout=REQUEST_TIMEOUT)
@@ -196,8 +218,21 @@ class StaticJSCrawler:
                     logger.warning(f"可能不是JavaScript文件: {url} (Content-Type: {content_type})")
                     self.report_generator.add_log(f"警告: 可能不是JavaScript文件: {url} (Content-Type: {content_type})", "WARNING")
             
-            # 生成本地文件路径
-            file_path = generate_file_path(url, self.target_url, 'static')
+            # 检查内容是否重复
+            content_hash = get_content_hash(response.content)
+            if content_hash in self.content_hashes:
+                existing_filename = self.hash_to_filename.get(content_hash, "未知文件")
+                logger.info(f"跳过重复文件: {url} (与 {existing_filename} 内容相同)")
+                self.report_generator.add_log(f"跳过重复文件: {url} (与 {existing_filename} 内容相同)")
+                self.duplicate_count += 1
+                return False
+            
+            # 生成本地文件路径（避免文件名冲突）
+            from ..utils.utils import generate_unique_file_path
+            file_path = generate_unique_file_path(url, self.target_url, 'static', self.existing_filenames)
+            
+            # 记录文件名
+            self.existing_filenames.add(file_path.name)
             
             # 保存文件
             with open(file_path, 'wb') as f:
@@ -205,6 +240,10 @@ class StaticJSCrawler:
             
             # 转换编码为UTF-8
             convert_to_utf8(file_path)
+            
+            # 更新去重信息
+            self.content_hashes.add(content_hash)
+            self.hash_to_filename[content_hash] = file_path.name
             
             download_time = time.time() - start_time
             
@@ -397,7 +436,7 @@ class StaticJSCrawler:
         
         # 生成并保存详细报告
         logger.info("正在生成爬取报告...")
-        self.report_generator.add_log(f"爬取完成 - 发现 {len(self.discovered_urls)} 个文件，成功下载 {len(self.downloaded_files)} 个")
+        self.report_generator.add_log(f"爬取完成 - 发现 {len(self.discovered_urls)} 个文件，成功下载 {len(self.downloaded_files)} 个，跳过重复文件 {self.duplicate_count} 个")
         self.report_generator.save_all_reports()
         self.report_generator.print_summary()
         
@@ -406,6 +445,7 @@ class StaticJSCrawler:
             'total_discovered': len(self.discovered_urls),
             'successful_downloads': len(self.downloaded_files),
             'failed_downloads': len(self.failed_downloads),
+            'duplicate_files': self.duplicate_count,
             'visited_pages': len(visited_pages),
             'downloaded_files': self.downloaded_files,
             'failed_files': self.failed_downloads
@@ -419,6 +459,7 @@ class StaticJSCrawler:
             'discovered_urls': len(self.discovered_urls),
             'downloaded_files': len(self.downloaded_files),
             'failed_downloads': len(self.failed_downloads),
+            'duplicate_files': self.duplicate_count,
             'total_size': total_size,
             'success_rate': len(self.downloaded_files) / len(self.discovered_urls) * 100 if self.discovered_urls else 0
         }

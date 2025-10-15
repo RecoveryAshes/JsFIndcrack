@@ -14,6 +14,7 @@ from ..crawlers.static_crawler import StaticJSCrawler
 from ..crawlers.dynamic_crawler import DynamicJSCrawler
 from .deobfuscator import JSDeobfuscator
 from ..utils.utils import save_checkpoint, load_checkpoint, format_file_size, calculate_file_hash
+from ..utils.parallel_similarity_analyzer import ParallelDeduplicationProcessor
 
 # 根据配置选择浏览器引擎
 if USE_EMBEDDED_BROWSER and BROWSER_ENGINE == "playwright":
@@ -41,7 +42,9 @@ class JSCrawler:
         self.manager = JSCrawlerManager(target_url)
     
     def crawl(self, depth: int = 2, wait_time: int = 3, max_workers: int = 2, playwright_tabs: int = 4, 
-              headless: bool = True, mode: str = 'all', resume: bool = False) -> Dict[str, Any]:
+              headless: bool = True, mode: str = 'all', resume: bool = False,
+              similarity_enabled: bool = True, similarity_threshold: float = 0.8,
+              similarity_workers: int = None, auto_similarity: bool = True) -> Dict[str, Any]:
         """执行爬取操作"""
         return self.manager.run(
             url=self.target_url,
@@ -51,7 +54,11 @@ class JSCrawler:
             playwright_tabs=playwright_tabs,
             headless=headless,
             mode=mode,
-            resume=resume
+            resume=resume,
+            similarity_enabled=similarity_enabled,
+            similarity_threshold=similarity_threshold,
+            similarity_workers=similarity_workers,
+            auto_similarity=auto_similarity
         )
 
 class JSCrawlerManager:
@@ -215,6 +222,12 @@ class JSCrawlerManager:
             else:
                 # 使用传统Selenium方式
                 logger.info("使用传统Selenium进行动态爬取")
+                # 为传统Selenium动态爬虫设置静态文件哈希值
+                if existing_file_hashes:
+                    self.dynamic_crawler.content_hashes.update(existing_file_hashes.keys())
+                    self.dynamic_crawler.hash_to_filename.update(existing_file_hashes)
+                    self.dynamic_crawler.static_file_hashes.update(existing_file_hashes.keys())
+                    logger.info(f"为传统动态爬虫设置了 {len(existing_file_hashes)} 个静态文件哈希")
                 results = self.dynamic_crawler.crawl_dynamic_js(url, wait_time)
             
             # 保存检查点
@@ -284,6 +297,91 @@ class JSCrawlerManager:
         # 运行异步爬取
         return asyncio.run(async_crawl())
     
+    def run_similarity_analysis(self, similarity_threshold: float = 0.8, 
+                               similarity_workers: int = None, resume: bool = False) -> Dict[str, Any]:
+        """运行智能相似度分析"""
+        logger.info("=" * 60)
+        logger.info("开始智能相似度分析")
+        logger.info("=" * 60)
+        
+        try:
+            # 检查是否需要恢复
+            if resume and 'similarity_completed' in self.checkpoint_data:
+                logger.info("相似度分析已完成，跳过此步骤")
+                return self.checkpoint_data.get('similarity_results', {})
+            
+            # 检查decode目录是否存在
+            decode_dir = self.dirs['decrypted_dir']
+            if not decode_dir.exists() or not any(decode_dir.glob('*.js')):
+                logger.warning("未找到反编译文件，跳过相似度分析")
+                return {
+                    'success': True,
+                    'total_files': 0,
+                    'unique_files': 0,
+                    'similar_groups': 0,
+                    'exact_duplicate_groups': 0,
+                    'processing_time_seconds': 0,
+                    'output_dir': None
+                }
+            
+            # 创建输出目录
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            similarity_output_dir = self.dirs['target_output_dir'] / f'similarity_analysis_{timestamp}'
+            
+            # 创建并运行相似度分析器
+            processor = ParallelDeduplicationProcessor(
+                similarity_threshold=similarity_threshold,
+                max_workers=similarity_workers
+            )
+            
+            logger.info(f"开始分析 {decode_dir} 中的反编译文件")
+            logger.info(f"相似度阈值: {similarity_threshold}")
+            logger.info(f"并行进程数: {similarity_workers or 'auto'}")
+            
+            # 执行分析
+            report = processor.process_directory(str(decode_dir), str(similarity_output_dir))
+            
+            # 保存检查点
+            similarity_results = {
+                'success': True,
+                'total_files': report['total_files'],
+                'unique_files': report['unique_files'],
+                'similar_groups': report['similar_groups'],
+                'exact_duplicate_groups': report['exact_duplicate_groups'],
+                'processing_time_seconds': report['processing_time_seconds'],
+                'files_per_second': report['files_per_second'],
+                'total_exact_duplicates': report['total_exact_duplicates'],
+                'total_similar_files': report['total_similar_files'],
+                'output_dir': str(similarity_output_dir)
+            }
+            
+            self.save_checkpoint({
+                'similarity_completed': True,
+                'similarity_results': similarity_results
+            })
+            
+            logger.info(f"相似度分析完成！")
+            logger.info(f"总文件数: {report['total_files']}")
+            logger.info(f"唯一文件数: {report['unique_files']}")
+            logger.info(f"相似文件组: {report['similar_groups']}")
+            logger.info(f"处理时间: {report['processing_time_seconds']:.2f} 秒")
+            logger.info(f"结果保存到: {similarity_output_dir}")
+            
+            return similarity_results
+            
+        except Exception as e:
+            logger.error(f"相似度分析失败: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'total_files': 0,
+                'unique_files': 0,
+                'similar_groups': 0,
+                'exact_duplicate_groups': 0,
+                'processing_time_seconds': 0,
+                'output_dir': None
+            }
+
     def deobfuscate_files(self, max_workers: int = 4, resume: bool = False) -> Dict[str, Any]:
         """反混淆JavaScript文件"""
         logger.info("=" * 60)
@@ -326,7 +424,8 @@ class JSCrawlerManager:
     
     def generate_final_report(self, static_results: Dict[str, Any], 
                             dynamic_results: Dict[str, Any], 
-                            deobfuscation_results: Dict[str, Any]) -> Dict[str, Any]:
+                            deobfuscation_results: Dict[str, Any],
+                            similarity_results: Dict[str, Any] = None) -> Dict[str, Any]:
         """生成最终统计报告"""
         end_time = time.time()
         total_time = end_time - self.start_time
@@ -382,6 +481,17 @@ class JSCrawlerManager:
             }
         }
         
+        # 添加相似度分析结果（如果有）
+        if similarity_results and similarity_results.get('success'):
+            report['similarity_analysis'] = {
+                'total_files': similarity_results.get('total_files', 0),
+                'similar_groups': similarity_results.get('similar_groups', 0),
+                'unique_files': similarity_results.get('unique_files', 0),
+                'deduplication_rate': similarity_results.get('deduplication_rate', '0%'),
+                'processing_time': similarity_results.get('processing_time', '0秒'),
+                'output_dir': similarity_results.get('output_dir', '')
+            }
+        
         return report
     
     def _consolidate_detailed_reports(self):
@@ -402,7 +512,7 @@ class JSCrawlerManager:
                 for file_info in static_generator.failed_files:
                     main_report_generator.add_failed_file(file_info)
                 # 合并日志
-                for log_entry in static_generator.logs:
+                for log_entry in static_generator.detailed_logs:
                     main_report_generator.add_log(log_entry)
             
             # 收集动态爬虫的报告数据
@@ -415,7 +525,7 @@ class JSCrawlerManager:
                 for file_info in dynamic_generator.failed_files:
                     main_report_generator.add_failed_file(file_info)
                 # 合并日志
-                for log_entry in dynamic_generator.logs:
+                for log_entry in dynamic_generator.detailed_logs:
                     main_report_generator.add_log(log_entry)
             
             # 添加整合完成的日志
@@ -425,15 +535,17 @@ class JSCrawlerManager:
             main_report_generator.save_all_reports()
             
             # 打印整合报告摘要
-            summary = main_report_generator.get_summary()
-            logger.info(f"整合报告摘要: {summary}")
+            summary = main_report_generator.generate_summary_report()
+            logger.info(f"整合报告摘要: {summary['crawl_summary']}")
             
         except Exception as e:
             logger.error(f"整合详细报告失败: {e}")
     
     def run(self, url: str, max_depth: int = 2, wait_time: int = 10, 
             max_workers: int = 4, playwright_tabs: int = 4, headless: bool = True, 
-            mode: str = 'all', resume: bool = False) -> Dict[str, Any]:
+            mode: str = 'all', resume: bool = False, similarity_enabled: bool = True,
+            similarity_threshold: float = 0.8, similarity_workers: int = None,
+            auto_similarity: bool = True) -> Dict[str, Any]:
         """运行完整的爬取和反混淆流程"""
         logger.info("JavaScript文件爬取和反混淆工具启动")
         logger.info(f"目标URL: {url}")
@@ -483,10 +595,25 @@ class JSCrawlerManager:
             deobfuscation_results = {}
             if static_results or dynamic_results:
                 deobfuscation_results = self.deobfuscate_files(max_workers, resume)
+                logger.info(f"反混淆完成，结果: {deobfuscation_results}")
+            
+            # 步骤4: 智能相似度分析（如果启用且有反编译文件）
+            similarity_results = {}
+            # 检查是否有文件需要分析
+            total_files = deobfuscation_results.get('total', {}).get('total_files', 0)
+            logger.info(f"相似度分析检查: similarity_enabled={similarity_enabled}, auto_similarity={auto_similarity}, total_files={total_files}")
+            logger.info(f"deobfuscation_results结构: {deobfuscation_results}")
+            if similarity_enabled or (auto_similarity and total_files > 0):
+                logger.info("开始执行相似度分析...")
+                similarity_results = self.run_similarity_analysis(
+                    similarity_threshold, similarity_workers, resume
+                )
+            else:
+                logger.info("跳过相似度分析")
             
             # 生成最终报告
             final_report = self.generate_final_report(
-                static_results, dynamic_results, deobfuscation_results
+                static_results, dynamic_results, deobfuscation_results, similarity_results
             )
             
             # 整合所有详细报告
@@ -561,13 +688,26 @@ class JSCrawlerManager:
         logger.info(f"  直接复制: {deob['copied']}")
         logger.info(f"  处理失败: {deob['failed']}")
         logger.info(f"  处理成功率: {deob['success_rate']}")
+        logger.info("")
+        
+        # 显示相似度分析结果（如果有）
+        if 'similarity_analysis' in report:
+            sim = report['similarity_analysis']
+            logger.info("智能相似度分析:")
+            logger.info(f"  分析文件数: {sim['total_files']}")
+            logger.info(f"  相似文件组: {sim['similar_groups']}")
+            logger.info(f"  唯一文件数: {sim['unique_files']}")
+            logger.info(f"  去重率: {sim['deduplication_rate']}")
+            logger.info(f"  处理时间: {sim['processing_time']}")
+            logger.info(f"  输出目录: {sim['output_dir']}")
+            logger.info("")
         
         logger.info("=" * 80)
 
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(description='JavaScript文件爬取和反混淆工具')
-    parser.add_argument('url', help='目标网站URL')
+    parser.add_argument('-u', '--url', dest='url', required=True, help='目标网站URL')
     parser.add_argument('-d', '--depth', type=int, default=2, help='爬取深度 (默认: 2)')
     parser.add_argument('-w', '--wait', type=int, default=3, help='页面等待时间(秒) (默认: 3)')
     parser.add_argument('-t', '--threads', type=int, default=2, help='静态爬取并行线程数 (默认: 2)')
@@ -577,6 +717,17 @@ def main():
     parser.add_argument('--mode', choices=['static', 'dynamic', 'all'], default='all', 
                        help='爬取模式: static(仅静态), dynamic(仅动态), all(全部) (默认: all)')
     parser.add_argument('-r', '--resume', action='store_true', help='从检查点恢复')
+    
+    # 相似度检测相关参数
+    parser.add_argument('--similarity', action='store_true', default=True, help='启用智能相似度检测和去重 (默认: True)')
+    parser.add_argument('--similarity-threshold', type=float, default=0.8, 
+                       help='相似度阈值 (0.0-1.0，默认: 0.8)')
+    parser.add_argument('--similarity-workers', type=int, default=None,
+                       help='相似度分析并行进程数 (默认: 自动检测)')
+    parser.add_argument('--no-similarity', dest='similarity', action='store_false', 
+                       help='禁用智能相似度检测和去重')
+    parser.add_argument('--no-similarity-auto', action='store_true', 
+                       help='禁用反编译后自动运行相似度分析')
     
     args = parser.parse_args()
     
@@ -595,7 +746,11 @@ def main():
             playwright_tabs=getattr(args, 'playwright_tabs'),
             headless=args.headless,
             mode=args.mode,
-            resume=args.resume
+            resume=args.resume,
+            similarity_enabled=args.similarity,
+            similarity_threshold=args.similarity_threshold,
+            similarity_workers=args.similarity_workers,
+            auto_similarity=not args.no_similarity_auto
         )
         
         # 输出结果

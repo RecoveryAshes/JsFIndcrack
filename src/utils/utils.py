@@ -84,17 +84,18 @@ def get_file_type(url: str) -> str:
     else:
         return 'unknown'
 
-def generate_file_path(url: str, target_url: str, file_type: str = "static") -> Path:
+def generate_unique_file_path(url: str, target_url: str, file_type: str = "static", existing_files: set = None) -> Path:
     """
-    根据URL生成文件保存路径
+    根据URL生成唯一的文件保存路径，避免文件名冲突
     
     Args:
         url: JavaScript文件的URL
         target_url: 目标网站的URL
         file_type: 文件类型，'static' 或 'dynamic'
+        existing_files: 已存在的文件名集合
     
     Returns:
-        Path: 文件保存路径
+        Path: 唯一的文件保存路径
     """
     from ..core.config import get_directory_structure
     
@@ -118,7 +119,38 @@ def generate_file_path(url: str, target_url: str, file_type: str = "static") -> 
     else:
         save_dir = dirs['dynamic_original_dir']
     
+    # 处理文件名冲突
+    base_path = save_dir / filename
+    if existing_files is None:
+        existing_files = set()
+    
+    # 如果文件名已存在，添加数字后缀
+    if filename in existing_files or base_path.exists():
+        name_part, ext_part = os.path.splitext(filename)
+        counter = 1
+        while True:
+            new_filename = f"{name_part}_{counter}{ext_part}"
+            new_path = save_dir / new_filename
+            if new_filename not in existing_files and not new_path.exists():
+                filename = new_filename
+                break
+            counter += 1
+    
     return save_dir / filename
+
+def generate_file_path(url: str, target_url: str, file_type: str = "static") -> Path:
+    """
+    根据URL生成文件保存路径（保持向后兼容）
+    
+    Args:
+        url: JavaScript文件的URL
+        target_url: 目标网站的URL
+        file_type: 文件类型，'static' 或 'dynamic'
+    
+    Returns:
+        Path: 文件保存路径
+    """
+    return generate_unique_file_path(url, target_url, file_type)
 
 def calculate_file_hash(file_path: Path) -> str:
     """计算文件MD5哈希值"""
@@ -148,8 +180,51 @@ def is_duplicate_content(content: bytes, existing_hashes: set) -> bool:
     return content_hash in existing_hashes if content_hash else False
 
 def get_content_hash(content: bytes) -> str:
-    """获取内容哈希值（用于去重）"""
+    """计算内容MD5哈希值（别名函数）"""
     return calculate_content_hash(content)
+
+def is_file_already_downloaded(url: str, target_url: str, file_type: str = "static") -> bool:
+    """
+    检查文件是否已经下载过（基于文件名）
+    
+    Args:
+        url: JavaScript文件的URL
+        target_url: 目标网站的URL
+        file_type: 文件类型，'static' 或 'dynamic'
+    
+    Returns:
+        bool: 如果文件已存在返回True，否则返回False
+    """
+    try:
+        from ..core.config import get_directory_structure
+        
+        # 获取目录结构
+        dirs = get_directory_structure(target_url)
+        
+        # 解析URL获取文件名
+        parsed_url = urlparse(url)
+        filename = Path(parsed_url.path).name
+        
+        # 如果没有文件名，生成一个
+        if not filename or not filename.endswith('.js'):
+            filename = f"{calculate_file_hash(url)}.js"
+        
+        # 清理文件名
+        filename = sanitize_filename(filename)
+        
+        # 确定保存目录
+        if file_type == "static":
+            save_dir = dirs['static_original_dir']
+        else:
+            save_dir = dirs['dynamic_original_dir']
+        
+        # 检查文件是否存在
+        file_path = save_dir / filename
+        return file_path.exists()
+        
+    except Exception as e:
+        logger.error(f"检查文件是否存在时出错: {e}")
+        return False
 
 def detect_encoding(file_path: Path) -> str:
     """检测文件编码"""
