@@ -29,7 +29,9 @@ def get_safe_executor(max_workers=None):
     """获取安全的执行器，在PyInstaller环境中使用ThreadPoolExecutor"""
     if is_frozen():
         # 在打包环境中使用线程池避免多进程问题
-        return ThreadPoolExecutor(max_workers=max_workers)
+        # 限制线程数以避免资源竞争
+        safe_max_workers = min(max_workers or 4, 8)
+        return ThreadPoolExecutor(max_workers=safe_max_workers)
     else:
         # 在开发环境中使用进程池获得更好的性能
         return ProcessPoolExecutor(max_workers=max_workers)
@@ -520,9 +522,15 @@ class ParallelDeduplicationProcessor:
 
 
 if __name__ == "__main__":
-    # 多进程保护 - 防止在PyInstaller环境中出现问题
+    # 多进程保护 - 在PyInstaller环境中完全避免设置start_method
     if not is_frozen():
-        mp.set_start_method('spawn', force=True)
+        try:
+            # 只在开发环境中设置start_method
+            mp.set_start_method('spawn', force=True)
+        except RuntimeError:
+            # 如果已经设置过start_method，忽略错误
+            pass
+    # 在打包环境中不设置start_method，避免子进程问题
     
     # 示例用法
     processor = ParallelDeduplicationProcessor(similarity_threshold=0.8, max_workers=8)
