@@ -10,6 +10,7 @@ import os
 import re
 import json
 import hashlib
+import sys
 from typing import Dict, List, Tuple, Set, Optional
 from collections import defaultdict, Counter
 import difflib
@@ -18,6 +19,20 @@ import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 import time
 from functools import partial
+
+# PyInstaller多进程保护
+def is_frozen():
+    """检查是否在PyInstaller打包环境中运行"""
+    return getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
+
+def get_safe_executor(max_workers=None):
+    """获取安全的执行器，在PyInstaller环境中使用ThreadPoolExecutor"""
+    if is_frozen():
+        # 在打包环境中使用线程池避免多进程问题
+        return ThreadPoolExecutor(max_workers=max_workers)
+    else:
+        # 在开发环境中使用进程池获得更好的性能
+        return ProcessPoolExecutor(max_workers=max_workers)
 
 
 @dataclass
@@ -279,7 +294,7 @@ class ParallelDeduplicationProcessor:
         print("第一阶段：提取文件特征...")
         features_dict = {}
         
-        with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
+        with get_safe_executor(max_workers=self.max_workers) as executor:
             future_to_file = {executor.submit(extract_file_features, file_path): file_path 
                              for file_path in js_files}
             
@@ -321,7 +336,7 @@ class ParallelDeduplicationProcessor:
         print(f"需要比较 {len(file_pairs)} 个文件对")
         
         # 并行计算相似度
-        with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
+        with get_safe_executor(max_workers=self.max_workers) as executor:
             future_to_pair = {executor.submit(calculate_similarity_pair, pair): pair 
                              for pair in file_pairs}
             
@@ -505,6 +520,10 @@ class ParallelDeduplicationProcessor:
 
 
 if __name__ == "__main__":
+    # 多进程保护 - 防止在PyInstaller环境中出现问题
+    if not is_frozen():
+        mp.set_start_method('spawn', force=True)
+    
     # 示例用法
     processor = ParallelDeduplicationProcessor(similarity_threshold=0.8, max_workers=8)
     
