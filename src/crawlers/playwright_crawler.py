@@ -20,6 +20,10 @@ try:
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
+    # 为类型注解提供占位符
+    Browser = None
+    Page = None
+    BrowserContext = None
 
 from ..utils.utils import is_supported_file, generate_file_path, convert_to_utf8, format_file_size, get_content_hash, is_duplicate_content, is_file_already_downloaded
 from ..utils.logger import get_logger
