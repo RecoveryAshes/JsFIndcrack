@@ -10,11 +10,11 @@
 - 🕷️ **多模式爬取**: 支持静态HTML解析和动态JavaScript执行两种爬取模式
 -**Source Map支持**: 自动识别和下载JavaScript Source Map文件(.map, .js.map)
 - **断点续爬**: 支持中断后从检查点恢复，避免重复工作
-- ⚡ **并发处理**: 多线程并行下载，显著提升爬取效率
-- 🔓 **智能反混淆**: 集成webcrack工具，自动识别和反混淆JavaScript代码
+-  **并发处理**: 多线程并行下载，显著提升爬取效率
+- **智能反混淆**: 集成webcrack工具，自动识别和反混淆JavaScript代码
 -  **智能过滤**: 自动去重、文件类型检测和大小限制
 -  **详细统计**: 实时进度显示和完整的爬取报告
-- 🛡️ **反爬虫检测**: 智能识别反爬虫机制并自动切换策略
+- **反爬虫检测**: 智能识别反爬虫机制并自动切换策略
 -**多浏览器支持**: 支持Selenium和Playwright两种浏览器引擎
 
 ##快速开始
@@ -23,7 +23,7 @@
 
 ```bash
 # 克隆项目
-git clone https://github.com/YOUR_USERNAME/JsFIndcrack.git
+git clone https://github.com/RecoveryAshes/JsFIndcrack
 cd JsFIndcrack
 
 # 运行安装脚本
