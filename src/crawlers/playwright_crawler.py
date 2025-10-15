@@ -9,6 +9,8 @@ Playwright动态爬虫模块 - 使用内置浏览器引擎
 import asyncio
 import time
 import re
+import sys
+import os
 from pathlib import Path
 from typing import Set, Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
@@ -27,6 +29,31 @@ except ImportError:
 
 from ..utils.utils import is_supported_file, generate_file_path, convert_to_utf8, format_file_size, get_content_hash, is_duplicate_content, is_file_already_downloaded
 from ..utils.logger import get_logger
+
+
+def get_packaged_browser_path():
+    """获取打包环境中的浏览器路径"""
+    if getattr(sys, 'frozen', False):
+        # 在打包环境中
+        if sys.platform == "darwin":  # macOS
+            # 在打包的可执行文件中，浏览器位于相对路径
+            base_path = Path(sys._MEIPASS)
+            browser_path = base_path / "playwright_browsers" / "chromium-1187" / "chrome-mac" / "Chromium.app" / "Contents" / "MacOS" / "Chromium"
+            if browser_path.exists():
+                return str(browser_path)
+        elif sys.platform.startswith("linux"):
+            # Linux环境
+            base_path = Path(sys._MEIPASS)
+            browser_path = base_path / "playwright_browsers" / "chromium-1187" / "chrome-linux" / "chrome"
+            if browser_path.exists():
+                return str(browser_path)
+        elif sys.platform.startswith("win"):
+            # Windows环境
+            base_path = Path(sys._MEIPASS)
+            browser_path = base_path / "playwright_browsers" / "chromium-1187" / "chrome-win" / "chrome.exe"
+            if browser_path.exists():
+                return str(browser_path)
+    return None
 
 
 class PlaywrightCrawler:
@@ -122,34 +149,53 @@ class PlaywrightCrawler:
         try:
             self.playwright = await async_playwright().start()
             
+            # 检查是否在打包环境中，如果是则使用打包的浏览器
+            packaged_browser_path = get_packaged_browser_path()
+            
+            # 浏览器启动参数
+            browser_args = [
+                '--no-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--disable-web-security',
+                '--disable-features=VizDisplayCompositor',
+                '--disable-extensions',
+                '--disable-plugins',
+                '--disable-images',
+                '--disable-javascript-harmony-shipping',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding'
+            ]
+            
             # 根据类型选择浏览器
             if self.browser_type == "firefox":
-                self.browser = await self.playwright.firefox.launch(
-                    headless=self.headless,
-                    args=['--no-sandbox', '--disable-dev-shm-usage']
-                )
+                launch_options = {
+                    'headless': self.headless,
+                    'args': ['--no-sandbox', '--disable-dev-shm-usage']
+                }
+                if packaged_browser_path and 'firefox' in packaged_browser_path.lower():
+                    launch_options['executable_path'] = packaged_browser_path
+                self.browser = await self.playwright.firefox.launch(**launch_options)
+                
             elif self.browser_type == "webkit":
-                self.browser = await self.playwright.webkit.launch(
-                    headless=self.headless
-                )
+                launch_options = {
+                    'headless': self.headless
+                }
+                if packaged_browser_path and 'webkit' in packaged_browser_path.lower():
+                    launch_options['executable_path'] = packaged_browser_path
+                self.browser = await self.playwright.webkit.launch(**launch_options)
+                
             else:  # chromium (默认)
-                self.browser = await self.playwright.chromium.launch(
-                    headless=self.headless,
-                    args=[
-                        '--no-sandbox',
-                        '--disable-dev-shm-usage',
-                        '--disable-gpu',
-                        '--disable-web-security',
-                        '--disable-features=VizDisplayCompositor',
-                        '--disable-extensions',
-                        '--disable-plugins',
-                        '--disable-images',
-                        '--disable-javascript-harmony-shipping',
-                        '--disable-background-timer-throttling',
-                        '--disable-backgrounding-occluded-windows',
-                        '--disable-renderer-backgrounding'
-                    ]
-                )
+                launch_options = {
+                    'headless': self.headless,
+                    'args': browser_args
+                }
+                if packaged_browser_path:
+                    launch_options['executable_path'] = packaged_browser_path
+                    self.logger.info(f"使用打包的浏览器: {packaged_browser_path}")
+                
+                self.browser = await self.playwright.chromium.launch(**launch_options)
             
             # 创建浏览器上下文
             self.context = await self.browser.new_context(
