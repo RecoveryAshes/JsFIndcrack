@@ -266,7 +266,12 @@ class StaticJSCrawler:
         except Exception as e:
             download_time = time.time() - start_time
             error_msg = str(e)
-            logger.error(f"下载失败 {url}: {error_msg}")
+            
+            # 检查是否是404错误，如果是则记录为警告而不是错误
+            if "404" in error_msg or "Not Found" in error_msg:
+                logger.warning(f"页面不存在 {url}: {error_msg}")
+            else:
+                logger.error(f"下载失败 {url}: {error_msg}")
             
             # 记录失败信息
             failed_info = {

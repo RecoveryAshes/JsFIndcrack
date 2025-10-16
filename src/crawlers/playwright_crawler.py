@@ -31,45 +31,8 @@ from ..utils.utils import is_supported_file, generate_file_path, convert_to_utf8
 from ..utils.logger import get_logger
 
 
-def get_packaged_browser_path(headless=True):
-    """获取打包环境中的浏览器路径"""
-    if getattr(sys, 'frozen', False):
-        # 在打包环境中
-        base_path = Path(sys._MEIPASS)
-        
-        if sys.platform == "darwin":  # macOS
-            if headless:
-                # 无头模式使用 headless_shell
-                browser_path = base_path / "playwright_browsers" / "chromium_headless_shell-1187" / "chrome-mac" / "headless_shell"
-                if browser_path.exists():
-                    return str(browser_path)
-            # 完整浏览器模式
-            browser_path = base_path / "playwright_browsers" / "chromium-1187" / "chrome-mac" / "Chromium.app" / "Contents" / "MacOS" / "Chromium"
-            if browser_path.exists():
-                return str(browser_path)
-                
-        elif sys.platform.startswith("linux"):
-            if headless:
-                # 无头模式使用 headless_shell
-                browser_path = base_path / "playwright_browsers" / "chromium_headless_shell-1187" / "chrome-linux" / "headless_shell"
-                if browser_path.exists():
-                    return str(browser_path)
-            # 完整浏览器模式
-            browser_path = base_path / "playwright_browsers" / "chromium-1187" / "chrome-linux" / "chrome"
-            if browser_path.exists():
-                return str(browser_path)
-                
-        elif sys.platform.startswith("win"):
-            if headless:
-                # 无头模式使用 headless_shell
-                browser_path = base_path / "playwright_browsers" / "chromium_headless_shell-1187" / "chrome-win" / "headless_shell.exe"
-                if browser_path.exists():
-                    return str(browser_path)
-            # 完整浏览器模式
-            browser_path = base_path / "playwright_browsers" / "chromium-1187" / "chrome-win" / "chrome.exe"
-            if browser_path.exists():
-                return str(browser_path)
-    return None
+# 用户需要自行安装playwright浏览器
+# 使用命令: playwright install
 
 
 class PlaywrightCrawler:
@@ -165,8 +128,7 @@ class PlaywrightCrawler:
         try:
             self.playwright = await async_playwright().start()
             
-            # 检查是否在打包环境中，如果是则使用打包的浏览器
-            packaged_browser_path = get_packaged_browser_path(self.headless)
+            # 使用系统安装的playwright浏览器
             
             # 浏览器启动参数
             browser_args = [
@@ -190,16 +152,12 @@ class PlaywrightCrawler:
                     'headless': self.headless,
                     'args': ['--no-sandbox', '--disable-dev-shm-usage']
                 }
-                if packaged_browser_path and 'firefox' in packaged_browser_path.lower():
-                    launch_options['executable_path'] = packaged_browser_path
                 self.browser = await self.playwright.firefox.launch(**launch_options)
                 
             elif self.browser_type == "webkit":
                 launch_options = {
                     'headless': self.headless
                 }
-                if packaged_browser_path and 'webkit' in packaged_browser_path.lower():
-                    launch_options['executable_path'] = packaged_browser_path
                 self.browser = await self.playwright.webkit.launch(**launch_options)
                 
             else:  # chromium (默认)
@@ -207,10 +165,6 @@ class PlaywrightCrawler:
                     'headless': self.headless,
                     'args': browser_args
                 }
-                if packaged_browser_path:
-                    launch_options['executable_path'] = packaged_browser_path
-                    self.logger.info(f"使用打包的浏览器: {packaged_browser_path}")
-                
                 self.browser = await self.playwright.chromium.launch(**launch_options)
             
             # 创建浏览器上下文
@@ -369,7 +323,12 @@ class PlaywrightCrawler:
                     self.stats['js_files_failed'] += 1
                     
             except Exception as e:
-                self.logger.error(f"下载JS文件失败 {url}: {e}")
+                # 检查是否是404错误，如果是则记录为警告而不是错误
+                error_msg = str(e)
+                if "404" in error_msg or "Not Found" in error_msg:
+                    self.logger.warning(f"页面不存在 {url}: {e}")
+                else:
+                    self.logger.error(f"下载JS文件失败 {url}: {e}")
                 self.stats['js_files_failed'] += 1
             finally:
                 # 立即关闭页面释放资源
@@ -434,7 +393,12 @@ class PlaywrightCrawler:
             return result
             
         except Exception as e:
-            self.logger.error(f"下载失败 {url}: {e}")
+            # 检查是否是404错误，如果是则记录为警告而不是错误
+            error_msg = str(e)
+            if "404" in error_msg or "Not Found" in error_msg:
+                self.logger.warning(f"页面不存在 {url}: {e}")
+            else:
+                self.logger.error(f"下载失败 {url}: {e}")
             progress_bar.update(1)
             return None
 
@@ -590,7 +554,12 @@ class PlaywrightCrawler:
             await page.close()
             
         except Exception as e:
-            self.logger.error(f"下载JS文件失败 {url}: {e}")
+            # 检查是否是404错误，如果是则记录为警告而不是错误
+            error_msg = str(e)
+            if "404" in error_msg or "Not Found" in error_msg:
+                self.logger.warning(f"页面不存在 {url}: {e}")
+            else:
+                self.logger.error(f"下载JS文件失败 {url}: {e}")
             self.stats['js_files_failed'] += 1
         
         return None

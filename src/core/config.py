@@ -7,16 +7,10 @@ from pathlib import Path
 # 基础配置
 # 获取项目根目录
 def get_base_dir():
-    """获取基础目录，优先使用当前工作目录"""
-    # 检查是否在PyInstaller打包环境中
-    if getattr(sys, 'frozen', False):
-        # 如果是打包后的可执行文件，使用当前工作目录
-        return Path.cwd()
-    else:
-        # 开发环境，从 src/core 向上两级到项目根目录
-        return Path(__file__).parent.parent.parent
+    """获取基础目录"""
+    # 从 src/core 向上两级到项目根目录
+    return Path(__file__).parent.parent.parent
 
-import sys
 BASE_DIR = get_base_dir()
 BASE_CONFIG = {
     'base_output_dir': 'output',  # 基础输出目录

@@ -34,7 +34,7 @@ pip install -r requirements.txt
 # 安装webcrack（用于反混淆）
 npm install -g webcrack
 
-# 安装浏览器驱动（Playwright可选）
+# 安装Playwright浏览器（必需，用于动态爬取）
 playwright install
 ```
 

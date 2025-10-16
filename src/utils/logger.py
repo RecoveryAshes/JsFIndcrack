@@ -11,20 +11,16 @@ init(autoreset=True)
 
 # 日志配置常量（避免循环导入）
 def get_base_dir():
-    """获取基础目录，优先使用当前工作目录"""
-    # 检查是否在PyInstaller打包环境中
-    if getattr(sys, 'frozen', False):
-        # 如果是打包后的可执行文件，使用当前工作目录
-        return Path.cwd()
-    else:
-        # 开发环境，从 src/utils 向上两级到项目根目录
-        return Path(__file__).parent.parent.parent
+    """获取基础目录"""
+    # 从 src/utils 向上两级到项目根目录
+    return Path(__file__).parent.parent.parent
 
 BASE_DIR = get_base_dir()
 LOGS_DIR = BASE_DIR / "logs"
 LOG_LEVEL = "INFO"
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 LOG_FILE = LOGS_DIR / "js_crawler.log"
+ERROR_LOG_FILE = LOGS_DIR / "js_crawler_error.log"
 
 class ColoredFormatter(logging.Formatter):
     """彩色日志格式化器"""
@@ -60,14 +56,21 @@ def setup_logger(name="js_crawler"):
     console_formatter = ColoredFormatter(LOG_FORMAT)
     console_handler.setFormatter(console_formatter)
     
-    # 文件处理器
+    # 文件处理器（所有日志）
     file_handler = logging.FileHandler(LOG_FILE, encoding='utf-8')
     file_handler.setLevel(logging.DEBUG)
     file_formatter = logging.Formatter(LOG_FORMAT)
     file_handler.setFormatter(file_formatter)
     
+    # 错误日志处理器（只记录ERROR和CRITICAL）
+    error_handler = logging.FileHandler(ERROR_LOG_FILE, encoding='utf-8')
+    error_handler.setLevel(logging.ERROR)
+    error_formatter = logging.Formatter(LOG_FORMAT)
+    error_handler.setFormatter(error_formatter)
+    
     logger.addHandler(console_handler)
     logger.addHandler(file_handler)
+    logger.addHandler(error_handler)
     
     return logger
 
