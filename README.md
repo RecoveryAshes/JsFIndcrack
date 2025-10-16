@@ -21,10 +21,10 @@
 
 ```bash
 # 克隆项目
-git clone https://github.com/RecoveryAshes/JsFIndcrack
+git clone https://github.com/RecoveryAshes/JsFIndcrack.git
 cd JsFIndcrack
 
-# 运行安装脚本
+# 运行安装脚本（推荐）
 chmod +x install.sh
 ./install.sh
 
@@ -64,6 +64,8 @@ JsFIndcrack/
 ├── main.py                    # 程序入口
 ├── requirements.txt           # Python依赖
 ├── install.sh                # 安装脚本
+├── README.md                 # 项目说明
+├── LICENSE                   # 许可证文件
 ├── src/                      # 源代码目录
 │   ├── core/                 # 核心模块
 │   │   ├── config.py         # 配置文件
@@ -79,13 +81,15 @@ JsFIndcrack/
 │       ├── report_generator.py # 报告生成器
 │       ├── similarity_analyzer.py # 相似度分析器
 │       └── parallel_similarity_analyzer.py # 并行相似度处理器
-├── output/                   # 输出目录
-│   └── [domain]/            # 按域名分类的输出
-│       ├── encode/          # 原始文件
-│       ├── decode/          # 反混淆文件
-│       ├── logs/           # 分类日志文件
-│       ├── checkpoints/    # 检查点文件
-│       └── similarity_analysis_[timestamp]/ # 相似度分析结果
+├── logs/                     # 全局日志目录
+│   ├── js_crawler.log       # 主日志文件
+│   └── js_crawler_error.log # 错误日志文件
+└── output/                   # 输出目录
+    └── [domain]/            # 按域名分类的输出
+        ├── encode/          # 原始文件
+        ├── decode/          # 反混淆文件
+        ├── checkpoints/     # 检查点文件
+        └── similarity_analysis_[timestamp]/ # 相似度分析结果
 ```
 
 ## 命令行参数
@@ -208,10 +212,6 @@ output/
     │   ├── js/              # JavaScript文件
     │   └── maps/            # Source Map文件
     ├── decode/              # 反混淆后的文件
-    ├── logs/                # 分类日志文件
-    │   ├── error_log        # 错误日志
-    │   ├── debug_log        # 调试日志
-    │   └── log_summary.json # 日志摘要
     ├── checkpoints/         # 检查点文件
     │   └── crawler_checkpoint.json
     ├── similarity_analysis_[timestamp]/ # 相似度分析结果
@@ -220,9 +220,12 @@ output/
     │   └── deduplication_report.json
     ├── crawl_report.json    # 爬取报告
     ├── crawl_summary.json   # 爬取摘要
-    ├── detailed_log.txt     # 详细日志
     ├── success_files.json   # 成功文件列表
     └── failed_files.json    # 失败文件列表
+
+logs/                        # 全局日志目录
+├── js_crawler.log          # 主日志文件
+└── js_crawler_error.log    # 错误日志文件
 ```
 
 ## 配置说明
@@ -256,8 +259,8 @@ export LOG_LEVEL=DEBUG
 python main.py -u https://example.com
 
 # 查看日志文件
-tail -f output/example.com/logs/debug_log
-tail -f output/example.com/detailed_log.txt
+tail -f logs/js_crawler.log
+tail -f logs/js_crawler_error.log
 ```
 
 ## 性能优化

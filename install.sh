@@ -94,19 +94,17 @@ fi
 
 # 创建必要目录
 echo "创建项目目录..."
-mkdir -p output/{original/{static,dynamic},decrypted/{static,dynamic},logs,checkpoints}
+mkdir -p output logs
 echo "✓ 目录结构创建完成"
 
 # 设置执行权限
 echo "设置执行权限..."
-chmod +x js_crawler.py
-chmod +x test_crawler.py
-chmod +x example_usage.py
+chmod +x main.py
 echo "✓ 执行权限设置完成"
 
-# 运行测试
+# 运行基本测试
 echo "运行基本测试..."
-if python3 test_crawler.py &> /dev/null; then
+if python3 main.py --help &> /dev/null; then
     echo "✓ 基本测试通过"
 else
     echo "警告: 基本测试未完全通过，请检查依赖"
@@ -117,10 +115,10 @@ echo "安装完成!"
 echo "=================================="
 echo ""
 echo "使用方法:"
-echo "  基本使用: python3 js_crawler.py https://example.com"
-echo "  运行测试: python3 test_crawler.py"
-echo "  查看示例: python3 example_usage.py"
-echo "  查看帮助: python3 js_crawler.py --help"
+echo "  基本使用: python3 main.py -u https://example.com"
+echo "  查看帮助: python3 main.py --help"
+echo "  静态爬取: python3 main.py -u https://example.com --mode static"
+echo "  动态爬取: python3 main.py -u https://example.com --mode dynamic"
 echo ""
 echo "注意事项:"
 echo "  1. 确保网络连接正常"
