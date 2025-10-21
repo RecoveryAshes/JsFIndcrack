@@ -5,8 +5,9 @@ import sys
 import time
 import argparse
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
+import re
 
 from .config import ensure_directories, get_directory_structure, SAVE_CHECKPOINT_INTERVAL, BROWSER_ENGINE, USE_EMBEDDED_BROWSER
 from ..utils.logger import setup_logger, get_logger
@@ -32,10 +33,183 @@ if USE_EMBEDDED_BROWSER and BROWSER_ENGINE == "playwright":
 else:
     PLAYWRIGHT_AVAILABLE = False
 
+# URL处理相关函数
+def load_urls_from_file(file_path: str) -> List[str]:
+    """从文件中读取URL列表并进行验证"""
+    urls = []
+    file_path = Path(file_path)
+    
+    if not file_path.exists():
+        _get_logger().error(f"文件不存在: {file_path}")
+        return []
+    
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        
+        for line_num, line in enumerate(lines, 1):
+            line = line.strip()
+            
+            # 跳过空行和注释行
+            if not line or line.startswith('#'):
+                continue
+            
+            # 验证URL格式
+            if is_valid_url(line):
+                urls.append(line)
+                _get_logger().info(f"读取URL [{line_num}]: {line}")
+            else:
+                _get_logger().warning(f"跳过无效URL [{line_num}]: {line}")
+        
+        _get_logger().info(f"从文件 {file_path} 中成功读取 {len(urls)} 个有效URL")
+        return urls
+        
+    except Exception as e:
+        _get_logger().error(f"读取文件失败: {e}")
+        return []
+
+def is_valid_url(url: str) -> bool:
+    """验证URL格式是否有效"""
+    if not url:
+        return False
+    
+    # 基本URL格式检查
+    if not url.startswith(('http://', 'https://')):
+        return False
+    
+    # 使用正则表达式进行更详细的验证
+    url_pattern = re.compile(
+        r'^https?://'  # http:// 或 https://
+        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # 域名
+        r'localhost|'  # localhost
+        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # IP地址
+        r'(?::\d+)?'  # 可选端口
+        r'(?:/?|[/?]\S+)$', re.IGNORECASE)  # 路径
+    
+    return bool(url_pattern.match(url))
+
 # 延迟logger初始化函数
 def _get_logger():
     setup_logger()
     return get_logger("main")
+
+class BatchJSCrawler:
+    """批量JavaScript爬取器"""
+    
+    def __init__(self, urls: List[str]):
+        self.urls = urls
+        self.results = []
+        self.failed_urls = []
+        self.successful_urls = []
+        
+    def crawl_batch(self, depth: int = 2, wait_time: int = 3, max_workers: int = 2, 
+                   playwright_tabs: int = 4, headless: bool = True, mode: str = 'all', 
+                   resume: bool = False, similarity_enabled: bool = True, 
+                   similarity_threshold: float = 0.8, similarity_workers: int = None,
+                   auto_similarity: bool = True, batch_delay: int = 1, 
+                   continue_on_error: bool = False) -> Dict[str, Any]:
+        """执行批量爬取操作"""
+        
+        logger = _get_logger()
+        logger.info(f"开始批量爬取 {len(self.urls)} 个URL")
+        
+        total_files = 0
+        start_time = time.time()
+        
+        for i, url in enumerate(self.urls, 1):
+            logger.info(f"\n{'='*60}")
+            logger.info(f"正在处理第 {i}/{len(self.urls)} 个URL: {url}")
+            logger.info(f"{'='*60}")
+            
+            try:
+                # 创建单个URL的爬取器
+                crawler = JSCrawler(url)
+                result = crawler.crawl(
+                    depth=depth,
+                    wait_time=wait_time,
+                    max_workers=max_workers,
+                    playwright_tabs=playwright_tabs,
+                    headless=headless,
+                    mode=mode,
+                    resume=resume,
+                    similarity_enabled=similarity_enabled,
+                    similarity_threshold=similarity_threshold,
+                    similarity_workers=similarity_workers,
+                    auto_similarity=auto_similarity
+                )
+                
+                # 检查是否是"未发现JavaScript文件"的情况
+                error_msg = result.get('error', '') or ''
+                is_no_js_found = '未发现任何JavaScript文件' in error_msg
+                
+                if result.get('success') or is_no_js_found:
+                    # 成功或者未发现JS文件都视为成功处理
+                    self.successful_urls.append(url)
+                    total_files += result.get('total_files', 0)
+                    
+                    if result.get('success'):
+                        logger.info(f"✅ URL {url} 爬取成功，获得 {result.get('total_files', 0)} 个文件")
+                    else:
+                        logger.info(f"ℹ️  URL {url} 处理完成，未发现JavaScript文件")
+                else:
+                    # 真正的错误情况
+                    self.failed_urls.append({'url': url, 'error': error_msg})
+                    logger.error(f"❌ URL {url} 爬取失败: {error_msg}")
+                    
+                    if not continue_on_error:
+                        logger.error("遇到错误，停止批量爬取")
+                        break
+                
+                # 记录结果
+                is_success = result.get('success', False) or is_no_js_found
+                self.results.append({
+                    'url': url,
+                    'success': is_success,
+                    'total_files': result.get('total_files', 0),
+                    'output_dir': result.get('output_dir', ''),
+                    'error': None if is_success else error_msg,
+                    'no_js_found': is_no_js_found  # 标记是否为未发现JS文件的情况
+                })
+                
+                # 在处理下一个URL之前等待
+                if i < len(self.urls) and batch_delay > 0:
+                    logger.info(f"等待 {batch_delay} 秒后处理下一个URL...")
+                    time.sleep(batch_delay)
+                    
+            except Exception as e:
+                error_msg = f"处理URL时发生异常: {e}"
+                logger.error(error_msg)
+                self.failed_urls.append({'url': url, 'error': error_msg})
+                
+                if not continue_on_error:
+                    logger.error("遇到异常，停止批量爬取")
+                    break
+        
+        end_time = time.time()
+        total_time = end_time - start_time
+        
+        # 生成批量爬取报告
+        return self._generate_batch_report(total_files, total_time)
+    
+    def _generate_batch_report(self, total_files: int, total_time: float) -> Dict[str, Any]:
+        """生成批量爬取报告"""
+        success_count = len(self.successful_urls)
+        failed_count = len(self.failed_urls)
+        total_count = len(self.urls)
+        
+        return {
+            'success': True,
+            'batch_mode': True,
+            'total_urls': total_count,
+            'successful_urls': success_count,
+            'failed_urls': failed_count,
+            'success_rate': (success_count / total_count * 100) if total_count > 0 else 0,
+            'total_files': total_files,
+            'total_time': total_time,
+            'results': self.results,
+            'failed_list': self.failed_urls,
+            'successful_list': self.successful_urls
+        }
 
 class JSCrawler:
     """JavaScript爬取器 - 面向用户的主要接口"""
@@ -711,7 +885,12 @@ class JSCrawlerManager:
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(description='JavaScript文件爬取和反混淆工具')
-    parser.add_argument('-u', '--url', dest='url', required=True, help='目标网站URL')
+    
+    # URL输入方式 - 互斥组
+    url_group = parser.add_mutually_exclusive_group(required=True)
+    url_group.add_argument('-u', '--url', dest='url', help='目标网站URL')
+    url_group.add_argument('-f', '--file', dest='url_file', help='包含URL列表的txt文件路径')
+    
     parser.add_argument('-d', '--depth', type=int, default=2, help='爬取深度 (默认: 2)')
     parser.add_argument('-w', '--wait', type=int, default=3, help='页面等待时间(秒) (默认: 3)')
     parser.add_argument('-t', '--threads', type=int, default=2, help='静态爬取并行线程数 (默认: 2)')
@@ -721,6 +900,10 @@ def main():
     parser.add_argument('--mode', choices=['static', 'dynamic', 'all'], default='all', 
                        help='爬取模式: static(仅静态), dynamic(仅动态), all(全部) (默认: all)')
     parser.add_argument('-r', '--resume', action='store_true', help='从检查点恢复')
+    
+    # 批量爬取相关参数
+    parser.add_argument('--batch-delay', type=int, default=1, help='批量爬取时URL之间的延迟时间(秒) (默认: 1)')
+    parser.add_argument('--continue-on-error', action='store_true', help='批量爬取时遇到错误继续处理下一个URL')
     
     # 相似度检测相关参数
     parser.add_argument('--similarity', action='store_true', default=True, help='启用智能相似度检测和去重 (默认: True)')
@@ -735,38 +918,123 @@ def main():
     
     args = parser.parse_args()
     
-    # 验证URL
-    if not args.url.startswith(('http://', 'https://')):
-        _get_logger().error("URL必须以http://或https://开头")
-        sys.exit(1)
-    
-    # 创建爬取器并运行
-    crawler = JSCrawler(args.url)
-    try:
-        result = crawler.crawl(
-            depth=args.depth,
-            wait_time=args.wait,
-            max_workers=args.threads,
-            playwright_tabs=getattr(args, 'playwright_tabs'),
-            headless=args.headless,
-            mode=args.mode,
-            resume=args.resume,
-            similarity_enabled=args.similarity,
-            similarity_threshold=args.similarity_threshold,
-            similarity_workers=args.similarity_workers,
-            auto_similarity=not args.no_similarity_auto
-        )
-        
-        # 输出结果
-        if result.get('success'):
-            print(f"\n爬取完成！总共处理了 {result.get('total_files', 0)} 个文件")
-            print(f"📁 输出目录: {result.get('output_dir', crawler.dirs['target_output_dir'])}")
-        else:
-            print(f"\n爬取失败: {result.get('error', '未知错误')}")
+    # 处理URL输入
+    urls = []
+    if args.url:
+        # 单个URL模式
+        if not args.url.startswith(('http://', 'https://')):
+            _get_logger().error("URL必须以http://或https://开头")
             sys.exit(1)
+        urls = [args.url]
+    elif args.url_file:
+        # 批量URL模式
+        urls = load_urls_from_file(args.url_file)
+        if not urls:
+            _get_logger().error("未能从文件中读取到有效的URL")
+            sys.exit(1)
+    
+    # 根据URL数量选择爬取模式
+    try:
+        if len(urls) == 1:
+            # 单URL模式
+            crawler = JSCrawler(urls[0])
+            result = crawler.crawl(
+                depth=args.depth,
+                wait_time=args.wait,
+                max_workers=args.threads,
+                playwright_tabs=getattr(args, 'playwright_tabs'),
+                headless=args.headless,
+                mode=args.mode,
+                resume=args.resume,
+                similarity_enabled=args.similarity,
+                similarity_threshold=args.similarity_threshold,
+                similarity_workers=args.similarity_workers,
+                auto_similarity=not args.no_similarity_auto
+            )
+            
+            # 输出单URL结果
+            if result.get('success'):
+                print(f"\n爬取完成！总共处理了 {result.get('total_files', 0)} 个文件")
+                print(f"📁 输出目录: {result.get('output_dir', crawler.dirs['target_output_dir'])}")
+            else:
+                print(f"\n爬取失败: {result.get('error', '未知错误')}")
+                sys.exit(1)
+        else:
+            # 批量URL模式
+            batch_crawler = BatchJSCrawler(urls)
+            result = batch_crawler.crawl_batch(
+                depth=args.depth,
+                wait_time=args.wait,
+                max_workers=args.threads,
+                playwright_tabs=getattr(args, 'playwright_tabs'),
+                headless=args.headless,
+                mode=args.mode,
+                resume=args.resume,
+                similarity_enabled=args.similarity,
+                similarity_threshold=args.similarity_threshold,
+                similarity_workers=args.similarity_workers,
+                auto_similarity=not args.no_similarity_auto,
+                batch_delay=args.batch_delay,
+                continue_on_error=args.continue_on_error
+            )
+            
+            # 输出批量爬取结果
+            print_batch_report(result)
+            
     except Exception as e:
         _get_logger().error(f"程序执行失败: {e}")
         sys.exit(1)
+
+def print_batch_report(result: Dict[str, Any]):
+    """打印批量爬取报告"""
+    print(f"\n{'='*80}")
+    print("📊 批量爬取完成报告")
+    print(f"{'='*80}")
+    
+    print(f"📈 总体统计:")
+    print(f"  • 总URL数量: {result.get('total_urls', 0)}")
+    print(f"  • 成功爬取: {result.get('successful_urls', 0)}")
+    print(f"  • 失败数量: {result.get('failed_urls', 0)}")
+    print(f"  • 成功率: {result.get('success_rate', 0):.1f}%")
+    print(f"  • 总文件数: {result.get('total_files', 0)}")
+    print(f"  • 总耗时: {result.get('total_time', 0):.2f} 秒")
+    
+    # 显示成功的URL
+    successful_list = result.get('successful_list', [])
+    if successful_list:
+        print(f"\n✅ 成功爬取的URL ({len(successful_list)}):")
+        for i, url in enumerate(successful_list, 1):
+            print(f"  {i}. {url}")
+    
+    # 显示失败的URL
+    failed_list = result.get('failed_list', [])
+    if failed_list:
+        print(f"\n❌ 失败的URL ({len(failed_list)}):")
+        for i, failed in enumerate(failed_list, 1):
+            print(f"  {i}. {failed['url']}")
+            print(f"     错误: {failed['error']}")
+    
+    # 显示详细结果
+    results = result.get('results', [])
+    if results:
+        print(f"\n📋 详细结果:")
+        for i, res in enumerate(results, 1):
+            if res['success']:
+                if res.get('no_js_found', False):
+                    status = "ℹ️ "
+                    print(f"  {i}. {status} {res['url']}")
+                    print(f"     状态: 未发现JavaScript文件")
+                else:
+                    status = "✅"
+                    print(f"  {i}. {status} {res['url']}")
+                    print(f"     文件数: {res['total_files']}")
+                    print(f"     输出目录: {res['output_dir']}")
+            else:
+                status = "❌"
+                print(f"  {i}. {status} {res['url']}")
+                print(f"     错误: {res['error']}")
+    
+    print(f"\n{'='*80}")
 
 if __name__ == "__main__":
     main()

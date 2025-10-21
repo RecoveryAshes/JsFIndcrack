@@ -4,12 +4,14 @@
 
 ## 主要特性
 
+- **批量扫描**: 支持从文件读取URL列表进行批量爬取，提高工作效率
 - **多模式爬取**: 支持静态HTML解析和动态JavaScript执行两种爬取模式
 - **Source Map支持**: 自动识别和下载JavaScript Source Map文件(.map, .js.map)
 - **断点续爬**: 支持中断后从检查点恢复，避免重复工作
 - **并发处理**: 多线程并行下载，显著提升爬取效率
 - **智能反混淆**: 集成webcrack工具，自动识别和反混淆JavaScript代码
 - **智能去重**: 基于文件内容的相似度检测和去重功能
+- **错误容错**: 批量模式下支持遇到错误继续处理下一个URL
 - **详细统计**: 实时进度显示和完整的爬取报告
 - **反爬虫检测**: 智能识别反爬虫机制并自动切换策略
 - **多浏览器支持**: 支持Selenium和Playwright两种浏览器引擎
@@ -40,6 +42,8 @@ playwright install
 
 ### 基本使用
 
+#### 单个网站爬取
+
 ```bash
 # 爬取单个网站（默认模式：静态+动态）
 python main.py -u https://example.com
@@ -55,6 +59,39 @@ python main.py -u https://example.com -d 3 -w 5 -t 4 --playwright-tabs 6
 
 # 启用相似度检测和去重
 python main.py -u https://example.com --similarity --similarity-threshold 0.8
+```
+
+#### 批量网站爬取
+
+```bash
+# 从文件批量爬取网站
+python main.py -f urls.txt
+
+# 批量爬取，遇到错误继续处理下一个URL
+python main.py -f urls.txt --continue-on-error
+
+# 批量爬取，设置URL之间的延迟时间
+python main.py -f urls.txt --batch-delay 2 --continue-on-error
+
+# 批量爬取，自定义参数
+python main.py -f urls.txt -d 2 -t 4 --batch-delay 1 --continue-on-error --mode static
+
+# 批量爬取，启用相似度检测
+python main.py -f urls.txt --continue-on-error --similarity --similarity-threshold 0.8
+```
+
+#### URL文件格式
+
+创建一个文本文件（如 `urls.txt`），每行一个URL：
+
+```
+# 这是注释行，会被忽略
+https://example1.com
+https://example2.com
+https://example3.com
+
+# 空行也会被忽略
+https://example4.com
 ```
 
 ## 项目结构
@@ -96,7 +133,10 @@ JsFIndcrack/
 
 | 参数 | 简写 | 默认值 | 说明 |
 |------|------|--------|------|
-| `--url` | `-u` | 必需 | 目标网站URL |
+| `--url` | `-u` | 必需* | 目标网站URL（与--url-file互斥） |
+| `--url-file` | `-f` | 必需* | URL列表文件路径（与--url互斥） |
+| `--batch-delay` | - | 0 | 批量模式下URL之间的延迟时间(秒) |
+| `--continue-on-error` | - | False | 批量模式下遇到错误时继续处理下一个URL |
 | `--depth` | `-d` | 2 | 爬取深度 |
 | `--wait` | `-w` | 3 | 页面等待时间(秒) |
 | `--threads` | `-t` | 2 | 静态爬取并行线程数 |
@@ -109,7 +149,9 @@ JsFIndcrack/
 | `--similarity-threshold` | - | 0.8 | 相似度阈值(0.0-1.0) |
 | `--similarity-workers` | - | CPU核心数 | 相似度分析并行工作线程数 |
 
-## API接口
+*注：`--url` 和 `--url-file` 参数互斥，必须指定其中一个
+
+## 接口
 
 ### 基本用法
 
@@ -148,17 +190,75 @@ result = crawler.crawl(
 
 ### 批量处理
 
+#### 使用BatchJSCrawler类
+
 ```python
+from src.core.js_crawler import BatchJSCrawler
+
+# 从文件加载URL列表
+urls_file = "urls.txt"
+batch_crawler = BatchJSCrawler()
+
+# 执行批量爬取
+result = batch_crawler.crawl_batch(
+    urls_file=urls_file,
+    depth=2,
+    wait_time=3,
+    max_workers=2,
+    playwright_tabs=4,
+    headless=True,
+    mode='all',
+    batch_delay=1,           # URL之间延迟1秒
+    continue_on_error=True   # 遇到错误继续处理
+)
+
+# 查看批量处理结果
+print(f"总URL数量: {result['total_urls']}")
+print(f"成功处理: {result['successful_urls']}")
+print(f"失败数量: {result['failed_urls']}")
+print(f"总文件数: {result['total_files']}")
+```
+
+#### 手动批量处理
+
+```python
+from src.core.js_crawler import JSCrawler
+
 urls = [
     "https://site1.com",
     "https://site2.com", 
     "https://site3.com"
 ]
 
-for url in urls:
-    crawler = JSCrawler(url)
-    result = crawler.crawl()
-    print(f"{url}: 完成，共处理 {result['total_files']} 个文件")
+results = []
+for i, url in enumerate(urls, 1):
+    print(f"处理第 {i}/{len(urls)} 个URL: {url}")
+    
+    try:
+        crawler = JSCrawler(url)
+        result = crawler.crawl()
+        results.append({
+            'url': url,
+            'success': True,
+            'total_files': result['total_files']
+        })
+        print(f"✅ {url}: 完成，共处理 {result['total_files']} 个文件")
+    except Exception as e:
+        results.append({
+            'url': url,
+            'success': False,
+            'error': str(e)
+        })
+        print(f"❌ {url}: 失败 - {e}")
+    
+    # 添加延迟
+    import time
+    time.sleep(1)
+
+# 统计结果
+successful = sum(1 for r in results if r['success'])
+total_files = sum(r.get('total_files', 0) for r in results if r['success'])
+print(f"\n批量处理完成: {successful}/{len(urls)} 成功，共获得 {total_files} 个文件")
 ```
 
 ## 支持的文件类型
