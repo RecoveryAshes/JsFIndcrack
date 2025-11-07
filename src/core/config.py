@@ -3,6 +3,14 @@ JavaScript文件爬取工具配置文件
 """
 import os
 from pathlib import Path
+from typing import Dict, Any, Optional
+
+# 尝试导入配置管理器
+try:
+    from .config_manager import get_config_manager, init_config_manager
+    CONFIG_MANAGER_AVAILABLE = True
+except ImportError:
+    CONFIG_MANAGER_AVAILABLE = False
 
 # 基础配置
 # 获取项目根目录
@@ -26,32 +34,64 @@ ORIGINAL_DIR = OUTPUT_DIR / BASE_CONFIG['original_dir']
 DECRYPTED_DIR = OUTPUT_DIR / BASE_CONFIG['decrypted_dir']
 LOGS_DIR = BASE_DIR / BASE_CONFIG['logs_dir']
 
-# 网络配置
-REQUEST_TIMEOUT = 30
-MAX_RETRIES = 3
-DELAY_BETWEEN_REQUESTS = 1
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+# 初始化配置管理器（如果可用）
+if CONFIG_MANAGER_AVAILABLE:
+    _config_manager = init_config_manager()
+
+    # 从配置文件加载配置
+    _crawler_config = _config_manager.get_crawler_config()
+    _browser_config = _config_manager.get_browser_config()
+    _headers = _config_manager.get_headers()
+
+    # 更新网络配置
+    REQUEST_TIMEOUT = _crawler_config.get('timeout', 30)
+    MAX_RETRIES = _crawler_config.get('max_retries', 3)
+    DELAY_BETWEEN_REQUESTS = _crawler_config.get('delay_between_requests', 1)
+    USER_AGENT = _headers.get('User-Agent', "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    VERIFY_SSL = _crawler_config.get('verify_ssl', False)
+    MAX_FILE_SIZE = _crawler_config.get('max_file_size_mb', 50) * 1024 * 1024
+
+    # 更新浏览器配置
+    BROWSER_ENGINE = _browser_config.get('engine', 'playwright')
+    HEADLESS_MODE = _browser_config.get('headless', True)
+    PAGE_LOAD_TIMEOUT = _browser_config.get('page_load_timeout', 60)
+    PLAYWRIGHT_BROWSER = _browser_config.get('playwright_browser', 'chromium')
+
+    # 导出headers供其他模块使用
+    REQUEST_HEADERS = _headers
+else:
+    # 使用默认配置
+    REQUEST_TIMEOUT = 30
+    MAX_RETRIES = 3
+    DELAY_BETWEEN_REQUESTS = 1
+    USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    VERIFY_SSL = False
+    MAX_FILE_SIZE = 50 * 1024 * 1024
+    BROWSER_ENGINE = "playwright"
+    HEADLESS_MODE = True
+    PAGE_LOAD_TIMEOUT = 60
+    PLAYWRIGHT_BROWSER = "chromium"
+    REQUEST_HEADERS = {
+        "User-Agent": USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br"
+    }
 
 # SSL配置
-VERIFY_SSL = False  # 是否验证SSL证书，设为False可忽略证书错误
 SSL_WARNINGS = False  # 是否显示SSL警告
 
 # Selenium配置
 SELENIUM_TIMEOUT = 30
-PAGE_LOAD_TIMEOUT = 60
 IMPLICIT_WAIT = 10
-HEADLESS_MODE = True
 
 # 浏览器引擎配置
-BROWSER_ENGINE = "playwright"  # "selenium" 或 "playwright"
-PLAYWRIGHT_BROWSER = "chromium"  # "chromium", "firefox", "webkit"
 USE_EMBEDDED_BROWSER = True  # 是否使用内置浏览器
 
 # 文件处理配置
 SUPPORTED_JS_EXTENSIONS = ['.js', '.mjs', '.jsx']
 SUPPORTED_MAP_EXTENSIONS = ['.map', '.js.map']  # 支持的source map文件扩展名
 SUPPORTED_FILE_EXTENSIONS = SUPPORTED_JS_EXTENSIONS + SUPPORTED_MAP_EXTENSIONS  # 所有支持的文件扩展名
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 ENCODING = 'utf-8'
 
 # 日志配置
@@ -142,3 +182,21 @@ def ensure_directories(target_url=None):
     
     for directory in directories:
         directory.mkdir(parents=True, exist_ok=True)
+
+def get_headers():
+    """获取当前配置的请求头"""
+    if CONFIG_MANAGER_AVAILABLE:
+        return get_config_manager().get_headers()
+    return REQUEST_HEADERS
+
+def get_cookies():
+    """获取当前配置的cookies"""
+    if CONFIG_MANAGER_AVAILABLE:
+        return get_config_manager().get_cookies()
+    return []
+
+def get_proxy_config():
+    """获取代理配置"""
+    if CONFIG_MANAGER_AVAILABLE:
+        return get_config_manager().get_proxy_config()
+    return {'enabled': False}

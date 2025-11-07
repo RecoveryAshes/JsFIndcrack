@@ -18,7 +18,8 @@ import queue
 
 from ..core.config import (
     REQUEST_TIMEOUT, MAX_RETRIES, DELAY_BETWEEN_REQUESTS,
-    USER_AGENT, MAX_FILE_SIZE, ORIGINAL_DIR, VERIFY_SSL, SSL_WARNINGS
+    USER_AGENT, MAX_FILE_SIZE, ORIGINAL_DIR, VERIFY_SSL, SSL_WARNINGS,
+    get_headers, get_cookies, get_proxy_config
 )
 from ..utils.utils import (
     is_valid_url, normalize_url, is_supported_file, 
@@ -61,30 +62,49 @@ class StaticJSCrawler:
     def _create_session(self) -> requests.Session:
         """创建配置好的requests会话"""
         session = requests.Session()
-        
+
         # 设置SSL验证
         session.verify = VERIFY_SSL
-        
+
         # 设置重试策略
         retry_strategy = Retry(
             total=MAX_RETRIES,
             backoff_factor=1,
             status_forcelist=[429, 500, 502, 503, 504],
         )
-        
+
         adapter = HTTPAdapter(max_retries=retry_strategy)
         session.mount("http://", adapter)
         session.mount("https://", adapter)
-        
-        # 设置请求头
-        session.headers.update({
-            'User-Agent': USER_AGENT,
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate',
-            'Connection': 'keep-alive',
-        })
-        
+
+        # 使用配置管理器中的headers
+        headers = get_headers()
+        session.headers.update(headers)
+
+        # 设置cookies（如果有）
+        cookies = get_cookies()
+        if cookies:
+            for cookie in cookies:
+                if isinstance(cookie, dict):
+                    session.cookies.set(
+                        cookie.get('name', ''),
+                        cookie.get('value', ''),
+                        domain=cookie.get('domain', ''),
+                        path=cookie.get('path', '/')
+                    )
+
+        # 设置代理（如果启用）
+        proxy_config = get_proxy_config()
+        if proxy_config.get('enabled'):
+            proxies = {}
+            if proxy_config.get('http'):
+                proxies['http'] = proxy_config['http']
+            if proxy_config.get('https'):
+                proxies['https'] = proxy_config['https']
+            if proxies:
+                session.proxies.update(proxies)
+                logger.info("已启用代理配置")
+
         return session
     
     def discover_files(self, url: str) -> Set[str]:

@@ -17,6 +17,8 @@ env/
 *.swp
 *.swo
 *~
+.claude
+
 
 # Logs
 logs/
@@ -38,6 +40,7 @@ output/
 downloads/
 temp/
 *.tmp
+docs/
 
 # Test files
 test_*.py

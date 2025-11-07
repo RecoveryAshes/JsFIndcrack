@@ -18,7 +18,8 @@ from tqdm import tqdm
 
 from ..core.config import (
     SELENIUM_TIMEOUT, PAGE_LOAD_TIMEOUT, IMPLICIT_WAIT, HEADLESS_MODE,
-    USER_AGENT, ORIGINAL_DIR, MAX_FILE_SIZE, VERIFY_SSL
+    USER_AGENT, ORIGINAL_DIR, MAX_FILE_SIZE, VERIFY_SSL,
+    get_headers, get_cookies, get_proxy_config
 )
 from ..utils.utils import (
     is_valid_url, normalize_url, is_supported_file,
@@ -63,12 +64,14 @@ class DynamicJSCrawler:
     def _setup_driver(self) -> webdriver.Chrome:
         """设置Chrome WebDriver"""
         chrome_options = Options()
-        
+
         if HEADLESS_MODE:
             chrome_options.add_argument("--headless")
-        
+
         # 基础配置
-        chrome_options.add_argument(f"--user-agent={USER_AGENT}")
+        headers = get_headers()
+        user_agent = headers.get('User-Agent', USER_AGENT)
+        chrome_options.add_argument(f"--user-agent={user_agent}")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
@@ -77,21 +80,28 @@ class DynamicJSCrawler:
         chrome_options.add_argument("--disable-extensions")
         chrome_options.add_argument("--disable-plugins")
         chrome_options.add_argument("--disable-images")
-        
+
+        # 设置代理（如果启用）
+        proxy_config = get_proxy_config()
+        if proxy_config.get('enabled'):
+            if proxy_config.get('http'):
+                chrome_options.add_argument(f"--proxy-server={proxy_config['http']}")
+                logger.info(f"已配置代理: {proxy_config['http']}")
+
         # 启用网络日志
         chrome_options.add_argument("--enable-logging")
         chrome_options.add_argument("--log-level=0")
         chrome_options.add_experimental_option("useAutomationExtension", False)
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        
+
         # 启用性能日志以捕获网络请求
         chrome_options.set_capability('goog:loggingPrefs', {
             'performance': 'ALL',
             'browser': 'ALL'
         })
-        
+
         driver = None
-        
+
         # 方法1: 尝试使用系统已安装的ChromeDriver
         try:
             logger.info("尝试使用系统ChromeDriver...")
@@ -370,8 +380,32 @@ class DynamicJSCrawler:
             
             # 使用requests下载文件
             session = requests.Session()
-            session.headers.update({'User-Agent': USER_AGENT})
+            headers = get_headers()
+            session.headers.update(headers)
             session.verify = VERIFY_SSL  # 设置SSL验证
+
+            # 设置cookies
+            cookies = get_cookies()
+            if cookies:
+                for cookie in cookies:
+                    if isinstance(cookie, dict):
+                        session.cookies.set(
+                            cookie.get('name', ''),
+                            cookie.get('value', ''),
+                            domain=cookie.get('domain', ''),
+                            path=cookie.get('path', '/')
+                        )
+
+            # 设置代理
+            proxy_config = get_proxy_config()
+            if proxy_config.get('enabled'):
+                proxies = {}
+                if proxy_config.get('http'):
+                    proxies['http'] = proxy_config['http']
+                if proxy_config.get('https'):
+                    proxies['https'] = proxy_config['https']
+                if proxies:
+                    session.proxies.update(proxies)
             
             # 检查文件大小
             try:
@@ -482,6 +516,37 @@ class DynamicJSCrawler:
             # 访问页面
             logger.info(f"正在访问页面: {url}")
             self.driver.get(url)
+
+            # 设置cookies（如果有配置）
+            cookies = get_cookies()
+            if cookies:
+                for cookie in cookies:
+                    if isinstance(cookie, dict):
+                        # 确保必要的字段存在
+                        cookie_dict = {
+                            'name': cookie.get('name', ''),
+                            'value': cookie.get('value', '')
+                        }
+                        # 添加可选字段
+                        if cookie.get('domain'):
+                            cookie_dict['domain'] = cookie['domain']
+                        if cookie.get('path'):
+                            cookie_dict['path'] = cookie['path']
+                        if cookie.get('secure') is not None:
+                            cookie_dict['secure'] = cookie['secure']
+                        if cookie.get('httpOnly') is not None:
+                            cookie_dict['httpOnly'] = cookie['httpOnly']
+
+                        try:
+                            self.driver.add_cookie(cookie_dict)
+                            logger.debug(f"已添加cookie: {cookie_dict['name']}")
+                        except Exception as e:
+                            logger.warning(f"添加cookie失败: {e}")
+
+                # 刷新页面以使cookies生效
+                if cookies:
+                    logger.info("刷新页面以使cookies生效")
+                    self.driver.refresh()
             
             # 等待页面初始加载
             time.sleep(3)
