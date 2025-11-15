@@ -1,6 +1,0 @@
-# 测试URL列表
-https://example.com
-https://example.org
-
-# 这是注释,会被跳过
-https://cc.qcqwcqx.sbs/

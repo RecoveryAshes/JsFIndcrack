@@ -206,7 +206,7 @@ output/
 
 ### 配置文件
 
-Go版本新增`config/headers.yaml`用于HTTP头配置:
+Go版本使用`configs/headers.yaml`用于HTTP头配置:
 
 ```yaml
 headers:
@@ -216,24 +216,19 @@ headers:
 
 ---
 
-## 快速开始 (Python版本 - 旧版)
+## 快速开始 (Python版本 - 已废弃)
+
+**注意**: Python版本已停止维护,强烈建议使用Go版本。
+
+如需使用Python版本(仅供参考):
 
 ```bash
-# 克隆项目
-git clone https://github.com/RecoveryAshes/JsFIndcrack.git
-cd JsFIndcrack
+# 查看Python版本分支
+git checkout python-legacy
 
-# 运行安装脚本（推荐）
-chmod +x install.sh
-./install.sh
-
-# 或手动安装
+# 手动安装
 pip install -r requirements.txt
-
-# 安装webcrack（用于反混淆）
 npm install -g webcrack
-
-# 安装Playwright浏览器（必需，用于动态爬取）
 playwright install
 ```
 
