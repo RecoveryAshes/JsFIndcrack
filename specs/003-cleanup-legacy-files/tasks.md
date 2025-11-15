@@ -179,10 +179,10 @@
 - [ ] T055 [P] 创建示例报告文件展示JSON和Markdown格式 在 `specs/003-cleanup-legacy-files/reports/`
 - [ ] T056 运行ShellCheck静态分析工具检查脚本质量
 - [ ] T057 执行所有Shell单元测试 `bats tests/unit/cleanup-python.bats`
-- [ ] T058 执行干跑模式测试: `./scripts/cleanup-python.sh --dry-run` 并验证输出
+- [X] T058 执行干跑模式测试: `./scripts/cleanup-python.sh --dry-run` 并验证输出
 - [ ] T059 在测试环境执行完整清理流程并验证
-- [ ] T060 清理后运行Go测试套件: `go test -v ./...` 确认100%通过
-- [ ] T061 验证清理后Go项目可正常构建: `make build` 或 `go build ./cmd/jsfindcrack`
+- [X] T060 清理后运行Go测试套件: `go test -v ./...` 确认100%通过
+- [X] T061 验证清理后Go项目可正常构建: `make build` 或 `go build ./cmd/jsfindcrack`
 
 **Checkpoint**: 所有功能完成,脚本经过完整测试和验证
 
