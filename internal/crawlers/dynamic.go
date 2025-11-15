@@ -214,7 +214,9 @@ func (dc *DynamicCrawler) setupNetworkIntercept(page *rod.Page) error {
 				body := ctx.Response.Body()
 				// 获取Content-Type
 				contentType := "application/javascript"
-				dc.downloadJSFile(requestURL, []byte(body), contentType)
+			if err := dc.downloadJSFile(requestURL, []byte(body), contentType); err != nil {
+					utils.Warnf("下载JS文件失败 [%s]: %v", requestURL, err)
+				}
 			}
 		}
 	})

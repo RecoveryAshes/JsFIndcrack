@@ -200,6 +200,8 @@ func (c *Crawler) runDynamicCrawl() error {
 }
 
 // updateFileHashes 更新全局文件哈希表
+// 注: 此函数预留用于未来的跨模式去重功能
+// nolint:unused
 func (c *Crawler) updateFileHashes(files []*models.JSFile) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -220,6 +222,8 @@ func (c *Crawler) updateFileHashes(files []*models.JSFile) {
 }
 
 // performCrossModeDedupe 执行跨模式去重
+// 注: 此函数预留用于未来的跨模式去重功能
+// nolint:unused
 func (c *Crawler) performCrossModeDedupe() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
