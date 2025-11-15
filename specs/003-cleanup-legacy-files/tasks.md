@@ -78,14 +78,14 @@
 
 ### Implementation for User Story 1
 
-- [ ] T017 [P] [US1] 实现文件扫描函数 `find_python_source_files()`: 使用find查找所有.py文件 在 `scripts/cleanup-python.sh`
-- [ ] T018 [P] [US1] 实现配置扫描函数 `find_python_config_files()`: 查找requirements.txt, setup.py 在 `scripts/cleanup-python.sh`
-- [ ] T019 [P] [US1] 实现目录识别函数 `find_python_directories()`: 识别src/及其子目录 在 `scripts/cleanup-python.sh`
-- [ ] T020 [US1] 实现白名单验证函数 `validate_against_whitelist()`: 检查待删除列表不包含白名单文件 在 `scripts/cleanup-python.sh`
-- [ ] T021 [US1] 实现文件分类汇总函数 `categorize_files()`: 按类型(源文件、配置、目录)分组 在 `scripts/cleanup-python.sh`
-- [ ] T022 [US1] 实现干跑模式显示逻辑: 格式化输出待删除文件清单和统计 在 `scripts/cleanup-python.sh`
-- [ ] T023 [US1] 实现文件删除函数 `delete_python_files()`: 先删除文件,后删除目录 在 `scripts/cleanup-python.sh`
-- [ ] T024 [US1] 添加删除操作的详细日志记录和错误处理 在 `scripts/cleanup-python.sh`
+- [X] T017 [P] [US1] 实现文件扫描函数 `find_python_source_files()`: 使用find查找所有.py文件 在 `scripts/cleanup-python.sh`
+- [X] T018 [P] [US1] 实现配置扫描函数 `find_python_config_files()`: 查找requirements.txt, setup.py 在 `scripts/cleanup-python.sh`
+- [X] T019 [P] [US1] 实现目录识别函数 `find_python_directories()`: 识别src/及其子目录 在 `scripts/cleanup-python.sh`
+- [X] T020 [US1] 实现白名单验证函数 `validate_against_whitelist()`: 检查待删除列表不包含白名单文件 在 `scripts/cleanup-python.sh`
+- [X] T021 [US1] 实现文件分类汇总函数 `categorize_files()`: 按类型(源文件、配置、目录)分组 在 `scripts/cleanup-python.sh`
+- [X] T022 [US1] 实现干跑模式显示逻辑: 格式化输出待删除文件清单和统计 在 `scripts/cleanup-python.sh`
+- [X] T023 [US1] 实现文件删除函数 `delete_python_files()`: 先删除文件,后删除目录 在 `scripts/cleanup-python.sh`
+- [X] T024 [US1] 添加删除操作的详细日志记录和错误处理 在 `scripts/cleanup-python.sh`
 
 **Checkpoint**: 用户故事1完成 - 可以识别、验证和删除Python源文件,同时保护Go代码
 
@@ -110,11 +110,11 @@
 
 ### Implementation for User Story 2
 
-- [ ] T029 [P] [US2] 实现构建产物扫描函数 `find_python_build_artifacts()`: 查找__pycache__, .pyc, .pyo 在 `scripts/cleanup-python.sh`
-- [ ] T030 [P] [US2] 扩展`find_python_build_artifacts()`支持.egg-info目录识别 在 `scripts/cleanup-python.sh`
-- [ ] T031 [US2] 将构建产物集成到`categorize_files()`的分类逻辑中 在 `scripts/cleanup-python.sh`
-- [ ] T032 [US2] 更新白名单验证确保dist/目录中的Go binary不被删除 在 `scripts/cleanup-python.sh`
-- [ ] T033 [US2] 更新删除函数`delete_python_files()`支持递归删除缓存目录 在 `scripts/cleanup-python.sh`
+- [X] T029 [P] [US2] 实现构建产物扫描函数 `find_python_build_artifacts()`: 查找__pycache__, .pyc, .pyo 在 `scripts/cleanup-python.sh`
+- [X] T030 [P] [US2] 扩展`find_python_build_artifacts()`支持.egg-info目录识别 在 `scripts/cleanup-python.sh`
+- [X] T031 [US2] 将构建产物集成到`categorize_files()`的分类逻辑中 在 `scripts/cleanup-python.sh`
+- [X] T032 [US2] 更新白名单验证确保dist/目录中的Go binary不被删除 在 `scripts/cleanup-python.sh`
+- [X] T033 [US2] 更新删除函数`delete_python_files()`支持递归删除缓存目录 在 `scripts/cleanup-python.sh`
 
 **Checkpoint**: 用户故事1和2完成 - Python源文件和构建产物都能正确清理
 
@@ -139,11 +139,11 @@
 
 ### Implementation for User Story 3
 
-- [ ] T038 [P] [US3] 扩展白名单常量定义,确保覆盖所有关键路径 在 `scripts/cleanup-python.sh`
+- [X] T038 [P] [US3] 扩展白名单常量定义,确保覆盖所有关键路径 在 `scripts/cleanup-python.sh`
 - [ ] T039 [P] [US3] 实现白名单冲突检测函数 `detect_whitelist_conflicts()`: 返回冲突文件列表 在 `scripts/cleanup-python.sh`
-- [ ] T040 [US3] 增强`validate_against_whitelist()`在发现冲突时立即错误退出 在 `scripts/cleanup-python.sh`
+- [X] T040 [US3] 增强`validate_against_whitelist()`在发现冲突时立即错误退出 在 `scripts/cleanup-python.sh`
 - [ ] T041 [US3] 实现白名单验证报告功能: 显示被保护的关键文件状态 在 `scripts/cleanup-python.sh`
-- [ ] T042 [US3] 在干跑和预览模式中显示白名单验证结果 在 `scripts/cleanup-python.sh`
+- [X] T042 [US3] 在干跑和预览模式中显示白名单验证结果 在 `scripts/cleanup-python.sh`
 
 **Checkpoint**: 所有3个用户故事完成 - 清理安全可靠,关键文件受保护
 
@@ -155,10 +155,10 @@
 
 ### 交互确认功能
 
-- [ ] T043 [P] 实现预览模式 `--preview`: 显示文件详细信息(大小、修改时间) 在 `scripts/cleanup-python.sh`
-- [ ] T044 [P] 实现执行确认流程: 显示警告、要求输入"yes" 在 `scripts/cleanup-python.sh`
-- [ ] T045 [P] 实现强制模式 `--force`: 跳过确认(添加警告日志) 在 `scripts/cleanup-python.sh`
-- [ ] T046 [P] 实现列表模式 `--list-only`: 仅输出文件路径(用于管道) 在 `scripts/cleanup-python.sh`
+- [X] T043 [P] 实现预览模式 `--preview`: 显示文件详细信息(大小、修改时间) 在 `scripts/cleanup-python.sh`
+- [X] T044 [P] 实现执行确认流程: 显示警告、要求输入"yes" 在 `scripts/cleanup-python.sh`
+- [X] T045 [P] 实现强制模式 `--force`: 跳过确认(添加警告日志) 在 `scripts/cleanup-python.sh`
+- [X] T046 [P] 实现列表模式 `--list-only`: 仅输出文件路径(用于管道) 在 `scripts/cleanup-python.sh`
 
 ### 报告生成功能
 
