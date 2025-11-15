@@ -45,3 +45,37 @@ docs/
 # Test files
 test_*.py
 *_test.py
+
+# Go
+*.exe
+*.test
+*.out
+*.prof
+vendor/
+go.work
+go.work.sum
+
+# Go build artifacts
+jsfindcrack
+jsfindcrack-*
+bin/
+build/
+dist/
+
+# Go test coverage
+coverage.out
+coverage.html
+*.coverprofile
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Temporary files
+*.swp
+*.tmp
+*.bak
+
+# Configuration files with sensitive data
+configs/headers.yaml
