@@ -1,0 +1,51 @@
+# JsFIndcrack HTTP请求头配置文件
+# 生成时间: 2025-11-15
+# 说明: 此文件用于配置爬虫发送HTTP请求时携带的自定义头部
+
+# ========================================
+# 通用HTTP头部配置
+# ========================================
+# 所有HTTP请求都会携带以下头部 (除非被命令行参数覆盖)
+
+headers:
+  # 用户代理字符串 - 模拟浏览器身份,避免被反爬虫识别
+  # 示例: Chrome 120浏览器
+  User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+  # 来源页面 - 某些网站会检查Referer头部
+  # 留空表示不发送此头部 (取消注释以启用)
+  # Referer: "https://www.google.com/"
+
+  # 接受的语言 - 影响网站返回的内容语言
+  Accept-Language: "zh-CN,zh;q=0.9,en;q=0.8"
+
+  # 接受的内容类型
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+
+  # 接受的编码方式
+  Accept-Encoding: "gzip, deflate, br"
+
+# ========================================
+# 认证头部配置 (可选)
+# ========================================
+# 警告: 此配置文件可能包含敏感信息,请勿提交到版本控制系统
+#      建议通过命令行参数 --header 传递认证信息
+
+# 认证示例 (取消注释以启用):
+# headers:
+#   Authorization: "Bearer YOUR_API_TOKEN_HERE"
+#   X-API-Key: "YOUR_API_KEY_HERE"
+
+# ========================================
+# 自定义头部
+# ========================================
+# 您可以添加任意自定义头部,格式:
+# headers:
+#   Custom-Header-Name: "Custom Header Value"
+
+# 注意事项:
+# 1. 头部名称只允许字母、数字和连字符
+# 2. 头部值不能包含控制字符
+# 3. 单个头部值最大长度为8KB
+# 4. 命令行参数 --header 优先级高于此配置文件
+# 5. 使用 jsfindcrack --validate-config 验证配置正确性

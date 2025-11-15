@@ -1,0 +1,97 @@
+# JsFIndcrack 默认配置
+# 配置文件路径: ~/.jsfindcrack/config.yaml 或 ./config/config.yaml
+
+# 爬取配置
+crawl:
+  # 爬取深度 (1-10)
+  depth: 2
+
+  # 页面等待时间(秒)
+  wait_time: 3
+
+  # 静态爬取并发线程数
+  max_workers: 2
+
+  # Playwright标签页数量
+  playwright_tabs: 4
+
+  # 无头模式
+  headless: true
+
+  # 默认爬取模式 (all/static/dynamic)
+  mode: "all"
+
+# 相似度分析配置
+similarity:
+  # 是否启用相似度检测
+  enabled: true
+
+  # 相似度阈值 (0.0-1.0)
+  threshold: 0.8
+
+  # 相似度分析并发数
+  workers: 8
+
+# 日志配置
+logging:
+  # 日志级别 (trace/debug/info/warn/error/fatal/panic)
+  level: "info"
+
+  # 日志输出目录
+  log_dir: "logs"
+
+  # 日志轮转配置
+  rotation:
+    max_size: 10    # MB
+    max_backups: 3  # 保留文件数
+    max_age: 28     # 天
+    compress: true
+
+# 输出配置
+output:
+  # 输出根目录
+  base_dir: "output"
+
+  # 是否按域名分离
+  domain_separation: true
+
+# 反混淆配置
+deobfuscation:
+  # 是否自动反混淆
+  auto: true
+
+  # webcrack命令路径
+  webcrack_path: "webcrack"
+
+  # 超时时间(分钟)
+  timeout: 5
+
+# 断点续爬配置
+checkpoint:
+  # 是否启用断点续爬
+  enabled: true
+
+  # 检查点保存频率(处理文件数)
+  save_frequency: 10
+
+  # 检查点文件目录
+  checkpoint_dir: "checkpoints"
+
+# 批量处理配置
+batch:
+  # 是否在错误时继续
+  continue_on_error: true
+
+  # URL之间延迟(秒)
+  delay: 1
+
+# 性能配置
+performance:
+  # 最大文件大小(MB)
+  max_file_size: 50
+
+  # 并发下载超时(秒)
+  download_timeout: 30
+
+  # HTTP请求超时(秒)
+  http_timeout: 30

@@ -1,24 +1,9 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-
-# Virtual Environment
-.venv/
-venv/
-ENV/
-env/
-
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-.claude
-
 
 # Logs
 logs/
@@ -32,16 +17,51 @@ logs/
 .Trashes
 ehthumbs.db
 Thumbs.db
-1.txt
-需求.md
 
 # Project specific
 output/
 downloads/
 temp/
 *.tmp
-docs/
 
-# Test files
-test_*.py
-*_test.py
+# Go
+*.exe
+*.test
+*.out
+*.prof
+vendor/
+go.work
+go.work.sum
+
+# Go build artifacts
+/jsfindcrack
+jsfindcrack-*
+bin/
+build/
+dist/
+
+# Special directory names (temporary testing)
+-/
+
+# Go test coverage
+coverage.out
+coverage.html
+*.coverprofile
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Temporary files
+*.bak
+
+# Configuration files with sensitive data
+configs/headers.yaml
+
+# Project management and development tools (not needed in production)
+.specify/
+CLAUDE.md
+specs/
+tests/
+scripts/

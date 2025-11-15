@@ -1,0 +1,120 @@
+name: Go CI
+
+on:
+  push:
+    branches: [ 001-py-to-go-migration, main ]
+  pull_request:
+    branches: [ 001-py-to-go-migration, main ]
+
+jobs:
+  test:
+    name: 测试
+    runs-on: ubuntu-latest
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 设置Go环境
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: 设置Node.js环境
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: 安装外部依赖
+      run: |
+        npm install -g webcrack playwright
+        playwright install chromium --with-deps
+
+    - name: 安装Go依赖
+      run: |
+        go mod download
+        go mod tidy
+
+    - name: 代码格式检查
+      run: make fmt
+
+    - name: 运行go vet
+      run: make vet
+
+    - name: 运行测试
+      run: make test-coverage
+
+    - name: 上传覆盖率报告
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.out
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  build:
+    name: 构建
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 设置Go环境
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: 构建二进制文件
+      run: make build
+
+    - name: 验证二进制文件
+      run: |
+        ./jsfindcrack --version || echo "版本命令未实现"
+        ./jsfindcrack --help
+
+  cross-compile:
+    name: 交叉编译
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/001-py-to-go-migration')
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 获取完整历史以支持git describe
+
+    - name: 设置Go环境
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: 交叉编译所有平台
+      run: make build-all
+
+    - name: 上传构建产物
+      uses: actions/upload-artifact@v4
+      with:
+        name: binaries
+        path: |
+          jsfindcrack-*
+          !jsfindcrack-*.tar.gz
+          !jsfindcrack-*.zip
+        retention-days: 30
+
+  lint:
+    name: 代码质量检查
+    runs-on: ubuntu-latest
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 设置Go环境
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: 运行golangci-lint
+      uses: golangci/golangci-lint-action@v4
+      with:
+        version: latest
+        args: --timeout=5m
