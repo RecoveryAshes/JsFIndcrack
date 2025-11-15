@@ -56,11 +56,13 @@ func NewStaticCrawler(config models.CrawlConfig, outputDir string, domain string
 	optimalWorkers := calculateOptimalWorkers(config.MaxWorkers)
 
 	// 配置并发限制
-	c.Limit(&colly.LimitRule{
+	if err := c.Limit(&colly.LimitRule{
 		DomainGlob:  "*",
 		Parallelism: optimalWorkers,
 		Delay:       1 * time.Second,
-	})
+	}); err != nil {
+		utils.Warnf("设置并发限制失败: %v", err)
+	}
 
 	utils.Debugf("静态爬取器并发优化: 配置=%d, CPU核心=%d, 最优并发=%d",
 		config.MaxWorkers, runtime.NumCPU(), optimalWorkers)
@@ -97,7 +99,9 @@ func (sc *StaticCrawler) setupCallbacks() {
 			utils.Debugf("发现JS文件: %s", jsURL)
 
 			// 访问JS文件URL以下载
-			e.Request.Visit(jsURL)
+			if err := e.Request.Visit(jsURL); err != nil {
+				utils.Warnf("访问JS文件失败 [%s]: %v", jsURL, err)
+			}
 		}
 	})
 
@@ -117,7 +121,9 @@ func (sc *StaticCrawler) setupCallbacks() {
 
 		// 如果是JavaScript文件,下载并保存
 		if sc.isJavaScriptURL(requestURL) {
-			sc.downloadJSFile(requestURL, r.Body, r.Headers.Get("Content-Type"))
+			if err := sc.downloadJSFile(requestURL, r.Body, r.Headers.Get("Content-Type")); err != nil {
+				utils.Warnf("下载JS文件失败 [%s]: %v", requestURL, err)
+			}
 		}
 	})
 

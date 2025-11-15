@@ -12,7 +12,7 @@ require (
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.20.0-alpha.6
-	gopkg.in/natefinch/lumberjack.v2 v2.2.1+incompatible
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
 require (
