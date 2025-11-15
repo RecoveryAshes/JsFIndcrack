@@ -204,13 +204,11 @@ setup_temp_files() {
 
 # 文件扫描函数 (T017)
 find_python_source_files() {
-    log_info "扫描Python源文件..."
     find "$PROJECT_ROOT" -type f -name "*.py" 2>/dev/null | grep -v "__pycache__" || true
 }
 
 # 配置文件扫描 (T018)
 find_python_config_files() {
-    log_info "扫描Python配置文件..."
     local config_files=()
 
     [ -f "$PROJECT_ROOT/requirements.txt" ] && config_files+=("$PROJECT_ROOT/requirements.txt")
@@ -224,7 +222,6 @@ find_python_config_files() {
 
 # 目录识别 (T019)
 find_python_directories() {
-    log_info "识别Python目录..."
     local py_dirs=()
 
     # src目录是主要目标
@@ -239,8 +236,6 @@ find_python_directories() {
 
 # 构建产物扫描 (T029 - US2)
 find_python_build_artifacts() {
-    log_info "扫描Python构建产物..."
-
     # __pycache__目录
     find "$PROJECT_ROOT" -type d -name "__pycache__" 2>/dev/null || true
 
@@ -261,8 +256,9 @@ validate_against_whitelist() {
 
     # 检查白名单目录
     for wl_dir in "${WHITELIST_DIRS[@]}"; do
-        if [[ "$file_path" == *"/$wl_dir"* ]] || [[ "$file_path" == "$PROJECT_ROOT/$wl_dir" ]]; then
-            log_error "⚠️ 白名单冲突: $file_path (包含保护目录: $wl_dir)"
+        # 检查文件是否在保护目录内(路径开头匹配或包含/目录名/)
+        if [[ "$file_path" == "$PROJECT_ROOT/$wl_dir" ]] || [[ "$file_path" == "$PROJECT_ROOT/$wl_dir/"* ]]; then
+            log_error "⚠️ 白名单冲突: $file_path (位于保护目录: $wl_dir)"
             return 1
         fi
     done
@@ -296,10 +292,10 @@ validate_against_whitelist() {
 categorize_files() {
     log_info "分类待删除文件..."
 
-    declare -g -a PYTHON_SOURCE_FILES=()
-    declare -g -a PYTHON_CONFIG_FILES=()
-    declare -g -a PYTHON_BUILD_ARTIFACTS=()
-    declare -g -a PYTHON_DIRECTORIES=()
+    PYTHON_SOURCE_FILES=()
+    PYTHON_CONFIG_FILES=()
+    PYTHON_BUILD_ARTIFACTS=()
+    PYTHON_DIRECTORIES=()
 
     # 收集源文件
     while IFS= read -r file; do
