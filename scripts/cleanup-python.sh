@@ -202,6 +202,292 @@ setup_temp_files() {
     log_info "临时文件创建: $TEMP_FILE"
 }
 
+# 文件扫描函数 (T017)
+find_python_source_files() {
+    log_info "扫描Python源文件..."
+    find "$PROJECT_ROOT" -type f -name "*.py" 2>/dev/null | grep -v "__pycache__" || true
+}
+
+# 配置文件扫描 (T018)
+find_python_config_files() {
+    log_info "扫描Python配置文件..."
+    local config_files=()
+
+    [ -f "$PROJECT_ROOT/requirements.txt" ] && config_files+=("$PROJECT_ROOT/requirements.txt")
+    [ -f "$PROJECT_ROOT/setup.py" ] && config_files+=("$PROJECT_ROOT/setup.py")
+    [ -f "$PROJECT_ROOT/setup.cfg" ] && config_files+=("$PROJECT_ROOT/setup.cfg")
+    [ -f "$PROJECT_ROOT/MANIFEST.in" ] && config_files+=("$PROJECT_ROOT/MANIFEST.in")
+    [ -f "$PROJECT_ROOT/pyproject.toml" ] && config_files+=("$PROJECT_ROOT/pyproject.toml")
+
+    printf '%s\n' "${config_files[@]}"
+}
+
+# 目录识别 (T019)
+find_python_directories() {
+    log_info "识别Python目录..."
+    local py_dirs=()
+
+    # src目录是主要目标
+    [ -d "$PROJECT_ROOT/src" ] && py_dirs+=("$PROJECT_ROOT/src")
+
+    # 其他可能的Python目录
+    [ -d "$PROJECT_ROOT/lib" ] && py_dirs+=("$PROJECT_ROOT/lib")
+    [ -d "$PROJECT_ROOT/python" ] && py_dirs+=("$PROJECT_ROOT/python")
+
+    printf '%s\n' "${py_dirs[@]}"
+}
+
+# 构建产物扫描 (T029 - US2)
+find_python_build_artifacts() {
+    log_info "扫描Python构建产物..."
+
+    # __pycache__目录
+    find "$PROJECT_ROOT" -type d -name "__pycache__" 2>/dev/null || true
+
+    # .pyc和.pyo文件
+    find "$PROJECT_ROOT" -type f \( -name "*.pyc" -o -name "*.pyo" \) 2>/dev/null || true
+
+    # .egg-info目录
+    find "$PROJECT_ROOT" -type d -name "*.egg-info" 2>/dev/null || true
+}
+
+# 白名单验证 (T020)
+validate_against_whitelist() {
+    local file_path="$1"
+    local basename
+    basename=$(basename "$file_path")
+    local dirname
+    dirname=$(dirname "$file_path")
+
+    # 检查白名单目录
+    for wl_dir in "${WHITELIST_DIRS[@]}"; do
+        if [[ "$file_path" == *"/$wl_dir"* ]] || [[ "$file_path" == "$PROJECT_ROOT/$wl_dir" ]]; then
+            log_error "⚠️ 白名单冲突: $file_path (包含保护目录: $wl_dir)"
+            return 1
+        fi
+    done
+
+    # 检查白名单文件
+    for wl_file in "${WHITELIST_FILES[@]}"; do
+        if [[ "$basename" == "$wl_file" ]]; then
+            log_error "⚠️ 白名单冲突: $file_path (受保护文件: $wl_file)"
+            return 1
+        fi
+    done
+
+    # 检查白名单模式
+    for pattern in "${WHITELIST_PATTERNS[@]}"; do
+        case "$basename" in
+            $pattern)
+                # .py文件不应该被模式保护
+                if [[ "$basename" == *.py ]]; then
+                    continue
+                fi
+                log_error "⚠️ 白名单冲突: $file_path (匹配模式: $pattern)"
+                return 1
+                ;;
+        esac
+    done
+
+    return 0
+}
+
+# 文件分类汇总 (T021)
+categorize_files() {
+    log_info "分类待删除文件..."
+
+    declare -g -a PYTHON_SOURCE_FILES=()
+    declare -g -a PYTHON_CONFIG_FILES=()
+    declare -g -a PYTHON_BUILD_ARTIFACTS=()
+    declare -g -a PYTHON_DIRECTORIES=()
+
+    # 收集源文件
+    while IFS= read -r file; do
+        if [ -n "$file" ]; then
+            PYTHON_SOURCE_FILES+=("$file")
+        fi
+    done < <(find_python_source_files)
+
+    # 收集配置文件
+    while IFS= read -r file; do
+        if [ -n "$file" ]; then
+            PYTHON_CONFIG_FILES+=("$file")
+        fi
+    done < <(find_python_config_files)
+
+    # 收集构建产物
+    while IFS= read -r file; do
+        if [ -n "$file" ]; then
+            PYTHON_BUILD_ARTIFACTS+=("$file")
+        fi
+    done < <(find_python_build_artifacts)
+
+    # 收集目录
+    while IFS= read -r dir; do
+        if [ -n "$dir" ]; then
+            PYTHON_DIRECTORIES+=("$dir")
+        fi
+    done < <(find_python_directories)
+
+    # 验证白名单
+    local has_conflicts=false
+    for file in "${PYTHON_SOURCE_FILES[@]}" "${PYTHON_CONFIG_FILES[@]}" "${PYTHON_DIRECTORIES[@]}"; do
+        if ! validate_against_whitelist "$file"; then
+            has_conflicts=true
+        fi
+    done
+
+    if [ "$has_conflicts" = true ]; then
+        log_error "检测到白名单冲突 - 清理操作已中止"
+        exit 1
+    fi
+
+    log_info "文件分类完成"
+}
+
+# 干跑模式显示 (T022)
+display_cleanup_preview() {
+    echo ""
+    echo "=== 待删除文件清单 ==="
+    echo ""
+
+    # Python源文件
+    if [ ${#PYTHON_SOURCE_FILES[@]} -gt 0 ]; then
+        local total_size=0
+        echo "【Python源文件】 (${#PYTHON_SOURCE_FILES[@]}个文件)"
+        for file in "${PYTHON_SOURCE_FILES[@]}"; do
+            if [ -f "$file" ]; then
+                local size
+                size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null || echo "0")
+                total_size=$((total_size + size))
+                echo "  - $file ($(numfmt --to=iec --suffix=B "$size" 2>/dev/null || echo "${size}B"))"
+            fi
+        done
+        echo "  小计: $(numfmt --to=iec --suffix=B "$total_size" 2>/dev/null || echo "${total_size}B")"
+        echo ""
+    fi
+
+    # Python配置文件
+    if [ ${#PYTHON_CONFIG_FILES[@]} -gt 0 ]; then
+        echo "【Python配置文件】 (${#PYTHON_CONFIG_FILES[@]}个文件)"
+        for file in "${PYTHON_CONFIG_FILES[@]}"; do
+            echo "  - $file"
+        done
+        echo ""
+    fi
+
+    # 构建产物
+    if [ ${#PYTHON_BUILD_ARTIFACTS[@]} -gt 0 ]; then
+        echo "【Python构建产物】 (${#PYTHON_BUILD_ARTIFACTS[@]}个文件/目录)"
+        local count=0
+        for item in "${PYTHON_BUILD_ARTIFACTS[@]}"; do
+            if [ $count -lt 10 ]; then
+                echo "  - $item"
+                count=$((count + 1))
+            fi
+        done
+        if [ ${#PYTHON_BUILD_ARTIFACTS[@]} -gt 10 ]; then
+            echo "  ... (还有 $((${#PYTHON_BUILD_ARTIFACTS[@]} - 10)) 个)"
+        fi
+        echo ""
+    fi
+
+    # Python目录
+    if [ ${#PYTHON_DIRECTORIES[@]} -gt 0 ]; then
+        echo "【目录】 (${#PYTHON_DIRECTORIES[@]}个目录)"
+        for dir in "${PYTHON_DIRECTORIES[@]}"; do
+            echo "  - $dir/"
+        done
+        echo ""
+    fi
+
+    # 总计
+    local total_files=$((${#PYTHON_SOURCE_FILES[@]} + ${#PYTHON_CONFIG_FILES[@]} + ${#PYTHON_BUILD_ARTIFACTS[@]}))
+    local total_dirs=${#PYTHON_DIRECTORIES[@]}
+
+    echo "=== 清理摘要 ==="
+    echo "总计: ${total_files}个文件, ${total_dirs}个目录"
+    echo ""
+
+    # 白名单验证状态
+    echo "=== 白名单验证 ==="
+    echo "✅ Go源代码: cmd/, internal/ (保留)"
+    echo "✅ Go配置: go.mod, go.sum (保留)"
+    echo "✅ 构建配置: Makefile (保留)"
+    echo "✅ 文档: specs/, .specify/ (保留)"
+    echo "✅ 测试: tests/ (保留)"
+    echo ""
+}
+
+# 文件删除 (T023)
+delete_python_files() {
+    log_info "开始删除Python文件..."
+
+    local deleted_count=0
+    local failed_count=0
+
+    # 删除源文件
+    for file in "${PYTHON_SOURCE_FILES[@]}"; do
+        if [ -f "$file" ]; then
+            if rm -f "$file" 2>/dev/null; then
+                log_info "删除: $file"
+                deleted_count=$((deleted_count + 1))
+            else
+                log_error "删除失败: $file"
+                failed_count=$((failed_count + 1))
+            fi
+        fi
+    done
+
+    # 删除配置文件
+    for file in "${PYTHON_CONFIG_FILES[@]}"; do
+        if [ -f "$file" ]; then
+            if rm -f "$file" 2>/dev/null; then
+                log_info "删除: $file"
+                deleted_count=$((deleted_count + 1))
+            else
+                log_error "删除失败: $file"
+                failed_count=$((failed_count + 1))
+            fi
+        fi
+    done
+
+    # 删除构建产物
+    for item in "${PYTHON_BUILD_ARTIFACTS[@]}"; do
+        if [ -e "$item" ]; then
+            if rm -rf "$item" 2>/dev/null; then
+                log_info "删除: $item"
+                deleted_count=$((deleted_count + 1))
+            else
+                log_error "删除失败: $item"
+                failed_count=$((failed_count + 1))
+            fi
+        fi
+    done
+
+    # 删除目录(最后删除)
+    for dir in "${PYTHON_DIRECTORIES[@]}"; do
+        if [ -d "$dir" ]; then
+            if rm -rf "$dir" 2>/dev/null; then
+                log_info "删除目录: $dir/"
+                deleted_count=$((deleted_count + 1))
+            else
+                log_error "删除目录失败: $dir/"
+                failed_count=$((failed_count + 1))
+            fi
+        fi
+    done
+
+    log_info "删除完成: 成功 $deleted_count, 失败 $failed_count"
+
+    if [ $failed_count -gt 0 ]; then
+        log_error "部分文件删除失败,请检查权限"
+        return 1
+    fi
+
+    return 0
+}
+
 # 主函数
 main() {
     parse_arguments "$@"
@@ -212,8 +498,58 @@ main() {
     log_info "Python文件清理工具初始化完成"
     log_info "运行模式: $MODE"
 
-    # TODO: 实现核心清理逻辑
-    log_warn "核心清理逻辑尚未实现"
+    # 扫描和分类文件
+    categorize_files
+
+    # 根据模式执行操作
+    case "$MODE" in
+        dry-run)
+            log_info "=== 干跑模式 - 仅预览,不执行删除 ==="
+            display_cleanup_preview
+            log_info "干跑模式完成 - 未执行任何删除操作"
+            log_info "如需执行清理,请运行: $SCRIPT_NAME --execute"
+            ;;
+
+        list-only)
+            # 仅输出文件路径
+            printf '%s\n' "${PYTHON_SOURCE_FILES[@]}" "${PYTHON_CONFIG_FILES[@]}" "${PYTHON_BUILD_ARTIFACTS[@]}" "${PYTHON_DIRECTORIES[@]}"
+            ;;
+
+        preview)
+            display_cleanup_preview
+            read -r -p "是否继续执行清理? (yes/no): " response
+            if [[ "$response" == "yes" ]]; then
+                delete_python_files
+            else
+                log_info "清理操作已取消"
+            fi
+            ;;
+
+        execute)
+            display_cleanup_preview
+            if [ "$FORCE" != "true" ]; then
+                echo "⚠️  警告: 即将删除上述文件和目录!"
+                echo "⚠️  此操作不可撤销 (除非通过Git恢复)"
+                echo ""
+                read -r -p "请输入 'yes' 确认继续: " confirmation
+                if [[ "$confirmation" != "yes" ]]; then
+                    log_info "清理操作已取消"
+                    exit 0
+                fi
+            else
+                log_warn "强制模式: 跳过确认提示"
+            fi
+
+            delete_python_files
+            log_info "✅ 清理完成!"
+            log_info "建议: 运行 'go test ./...' 验证Go功能完整性"
+            ;;
+
+        *)
+            log_error "未知模式: $MODE"
+            exit 1
+            ;;
+    esac
 }
 
 # 执行主函数
