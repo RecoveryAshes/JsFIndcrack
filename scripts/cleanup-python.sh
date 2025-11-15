@@ -217,7 +217,9 @@ find_python_config_files() {
     [ -f "$PROJECT_ROOT/MANIFEST.in" ] && config_files+=("$PROJECT_ROOT/MANIFEST.in")
     [ -f "$PROJECT_ROOT/pyproject.toml" ] && config_files+=("$PROJECT_ROOT/pyproject.toml")
 
-    printf '%s\n' "${config_files[@]}"
+    if [ ${#config_files[@]} -gt 0 ]; then
+        printf '%s\n' "${config_files[@]}"
+    fi
 }
 
 # 目录识别 (T019)
@@ -231,7 +233,9 @@ find_python_directories() {
     [ -d "$PROJECT_ROOT/lib" ] && py_dirs+=("$PROJECT_ROOT/lib")
     [ -d "$PROJECT_ROOT/python" ] && py_dirs+=("$PROJECT_ROOT/python")
 
-    printf '%s\n' "${py_dirs[@]}"
+    if [ ${#py_dirs[@]} -gt 0 ]; then
+        printf '%s\n' "${py_dirs[@]}"
+    fi
 }
 
 # 构建产物扫描 (T029 - US2)
@@ -327,11 +331,26 @@ categorize_files() {
 
     # 验证白名单
     local has_conflicts=false
-    for file in "${PYTHON_SOURCE_FILES[@]}" "${PYTHON_CONFIG_FILES[@]}" "${PYTHON_DIRECTORIES[@]}"; do
-        if ! validate_against_whitelist "$file"; then
-            has_conflicts=true
-        fi
-    done
+    local all_files=()
+
+    # 合并所有文件和目录到一个数组进行验证
+    if [ ${#PYTHON_SOURCE_FILES[@]} -gt 0 ]; then
+        all_files+=("${PYTHON_SOURCE_FILES[@]}")
+    fi
+    if [ ${#PYTHON_CONFIG_FILES[@]} -gt 0 ]; then
+        all_files+=("${PYTHON_CONFIG_FILES[@]}")
+    fi
+    if [ ${#PYTHON_DIRECTORIES[@]} -gt 0 ]; then
+        all_files+=("${PYTHON_DIRECTORIES[@]}")
+    fi
+
+    if [ ${#all_files[@]} -gt 0 ]; then
+        for file in "${all_files[@]}"; do
+            if ! validate_against_whitelist "$file"; then
+                has_conflicts=true
+            fi
+        done
+    fi
 
     if [ "$has_conflicts" = true ]; then
         log_error "检测到白名单冲突 - 清理操作已中止"
@@ -423,56 +442,64 @@ delete_python_files() {
     local failed_count=0
 
     # 删除源文件
-    for file in "${PYTHON_SOURCE_FILES[@]}"; do
-        if [ -f "$file" ]; then
-            if rm -f "$file" 2>/dev/null; then
-                log_info "删除: $file"
-                deleted_count=$((deleted_count + 1))
-            else
-                log_error "删除失败: $file"
-                failed_count=$((failed_count + 1))
+    if [ ${#PYTHON_SOURCE_FILES[@]} -gt 0 ]; then
+        for file in "${PYTHON_SOURCE_FILES[@]}"; do
+            if [ -f "$file" ]; then
+                if rm -f "$file" 2>/dev/null; then
+                    log_info "删除: $file"
+                    deleted_count=$((deleted_count + 1))
+                else
+                    log_error "删除失败: $file"
+                    failed_count=$((failed_count + 1))
+                fi
             fi
-        fi
-    done
+        done
+    fi
 
     # 删除配置文件
-    for file in "${PYTHON_CONFIG_FILES[@]}"; do
-        if [ -f "$file" ]; then
-            if rm -f "$file" 2>/dev/null; then
-                log_info "删除: $file"
-                deleted_count=$((deleted_count + 1))
-            else
-                log_error "删除失败: $file"
-                failed_count=$((failed_count + 1))
+    if [ ${#PYTHON_CONFIG_FILES[@]} -gt 0 ]; then
+        for file in "${PYTHON_CONFIG_FILES[@]}"; do
+            if [ -f "$file" ]; then
+                if rm -f "$file" 2>/dev/null; then
+                    log_info "删除: $file"
+                    deleted_count=$((deleted_count + 1))
+                else
+                    log_error "删除失败: $file"
+                    failed_count=$((failed_count + 1))
+                fi
             fi
-        fi
-    done
+        done
+    fi
 
     # 删除构建产物
-    for item in "${PYTHON_BUILD_ARTIFACTS[@]}"; do
-        if [ -e "$item" ]; then
-            if rm -rf "$item" 2>/dev/null; then
-                log_info "删除: $item"
-                deleted_count=$((deleted_count + 1))
-            else
-                log_error "删除失败: $item"
-                failed_count=$((failed_count + 1))
+    if [ ${#PYTHON_BUILD_ARTIFACTS[@]} -gt 0 ]; then
+        for item in "${PYTHON_BUILD_ARTIFACTS[@]}"; do
+            if [ -e "$item" ]; then
+                if rm -rf "$item" 2>/dev/null; then
+                    log_info "删除: $item"
+                    deleted_count=$((deleted_count + 1))
+                else
+                    log_error "删除失败: $item"
+                    failed_count=$((failed_count + 1))
+                fi
             fi
-        fi
-    done
+        done
+    fi
 
     # 删除目录(最后删除)
-    for dir in "${PYTHON_DIRECTORIES[@]}"; do
-        if [ -d "$dir" ]; then
-            if rm -rf "$dir" 2>/dev/null; then
-                log_info "删除目录: $dir/"
-                deleted_count=$((deleted_count + 1))
-            else
-                log_error "删除目录失败: $dir/"
-                failed_count=$((failed_count + 1))
+    if [ ${#PYTHON_DIRECTORIES[@]} -gt 0 ]; then
+        for dir in "${PYTHON_DIRECTORIES[@]}"; do
+            if [ -d "$dir" ]; then
+                if rm -rf "$dir" 2>/dev/null; then
+                    log_info "删除目录: $dir/"
+                    deleted_count=$((deleted_count + 1))
+                else
+                    log_error "删除目录失败: $dir/"
+                    failed_count=$((failed_count + 1))
+                fi
             fi
-        fi
-    done
+        done
+    fi
 
     log_info "删除完成: 成功 $deleted_count, 失败 $failed_count"
 
@@ -508,7 +535,10 @@ main() {
 
         list-only)
             # 仅输出文件路径
-            printf '%s\n' "${PYTHON_SOURCE_FILES[@]}" "${PYTHON_CONFIG_FILES[@]}" "${PYTHON_BUILD_ARTIFACTS[@]}" "${PYTHON_DIRECTORIES[@]}"
+            [ ${#PYTHON_SOURCE_FILES[@]} -gt 0 ] && printf '%s\n' "${PYTHON_SOURCE_FILES[@]}"
+            [ ${#PYTHON_CONFIG_FILES[@]} -gt 0 ] && printf '%s\n' "${PYTHON_CONFIG_FILES[@]}"
+            [ ${#PYTHON_BUILD_ARTIFACTS[@]} -gt 0 ] && printf '%s\n' "${PYTHON_BUILD_ARTIFACTS[@]}"
+            [ ${#PYTHON_DIRECTORIES[@]} -gt 0 ] && printf '%s\n' "${PYTHON_DIRECTORIES[@]}"
             ;;
 
         preview)
