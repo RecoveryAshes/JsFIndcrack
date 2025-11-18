@@ -3,8 +3,13 @@ name: Go CI
 on:
   push:
     branches: [ 001-py-to-go-migration, main ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ 001-py-to-go-migration, main ]
+
+permissions:
+  contents: write
 
 jobs:
   test:
