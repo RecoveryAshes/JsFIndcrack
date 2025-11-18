@@ -5,30 +5,12 @@
 [![Platform](https://img.shields.io/badge/Platform-Linux%20|%20macOS%20|%20Windows-lightgrey)](https://github.com/RecoveryAshes/JsFIndcrack)
 [![GitHub Release](https://img.shields.io/github/v/release/RecoveryAshes/JsFIndcrack)](https://github.com/RecoveryAshes/JsFIndcrack/releases)
 
-一个功能强大的JavaScript文件爬取和反混淆工具，**已使用Go语言完全重写**，提供更快的性能、更低的内存占用和单一可执行文件部署。
-
-## 🎉 Go版本重写完成!
-
-**v2.0 Go重写版**已完成开发,相比Python版本具有以下优势:
-
-| 特性 | Python版本 | Go版本 |
-|------|-----------|--------|
-| **部署** | 需要Python运行时 | 单一可执行文件 ✅ |
-| **依赖** | 需要pip安装多个库 | 无外部依赖 ✅ |
-| **启动速度** | ~2秒 | <1秒 ✅ |
-| **内存占用** | 基准 | -40% ✅ |
-| **批量爬取速度** | 基准 | +30% ✅ |
-| **反混淆速度** | 基准 | +50% ✅ |
-| **并发性能** | 多进程 | 原生goroutine ✅ |
-
-**推荐使用Go版本以获得最佳体验!** 👉 [快速开始](#快速开始-go版本)
-
----
+一个功能强大的JavaScript文件爬取和反混淆工具，使用Go语言开发，提供高性能、低内存占用和单一可执行文件部署。
 
 ## 主要特性
 
 ### 核心功能
-- ✅ **单一可执行文件**: 无需Python运行时,无需依赖库
+- ✅ **单一可执行文件**: 无需运行时依赖，直接运行
 - ✅ **跨平台支持**: Linux/macOS/Windows三平台原生支持
 - ✅ **批量扫描**: 支持从文件读取URL列表进行批量爬取
 - ✅ **多模式爬取**: 静态HTML解析(Colly)和动态浏览器执行(Rod)
@@ -48,7 +30,7 @@
 
 ---
 
-## 快速开始 (Go版本)
+## 快速开始
 
 ### 选项1: 下载预编译二进制文件 (推荐)
 
@@ -128,6 +110,10 @@ npm install -g webcrack
 - Rod会自动下载Chromium,首次运行时自动安装
 - 或使用系统已安装的Chrome: `export ROD_BROWSER_PATH=/path/to/chrome`
 
+---
+
+## 使用说明
+
 ### 基本使用
 
 ```bash
@@ -184,23 +170,23 @@ HTTP头部参数:
       --similarity-threshold float  相似度阈值 (0.0-1.0) (默认: 0.9)
 ```
 
+### URL列表文件格式
+
+创建一个文本文件（如 `urls.txt`），每行一个URL：
+
+```
+# 这是注释行，会被忽略
+https://example1.com
+https://example2.com
+https://example3.com
+
+# 空行也会被忽略
+https://example4.com
+```
+
 ---
 
-## 从Python版本迁移
-
-### 参数映射
-
-| Python | Go |
-|--------|-----|
-| `python main.py -u URL` | `./jsfindcrack -u URL` |
-| `--depth N` | `-d N` |
-| `--threads N` | `--threads N` |
-| `--mode static` | `--mode static` |
-| `--headless` | `--headless` |
-| `--url-file FILE` | `-f FILE` |
-| `--batch-delay N` | `--batch-delay N` |
-
-### 输出目录结构 (100%兼容)
+## 输出目录结构
 
 ```
 output/
@@ -217,7 +203,7 @@ output/
 
 ### 配置文件
 
-Go版本使用`configs/headers.yaml`用于HTTP头配置:
+使用`configs/headers.yaml`配置HTTP头:
 
 ```yaml
 headers:
@@ -227,77 +213,7 @@ headers:
 
 ---
 
-## 快速开始 (Python版本 - 已废弃)
-
-**注意**: Python版本已停止维护,强烈建议使用Go版本。
-
-如需使用Python版本(仅供参考):
-
-```bash
-# 查看Python版本分支
-git checkout python-legacy
-
-# 手动安装
-pip install -r requirements.txt
-npm install -g webcrack
-playwright install
-```
-
-### 基本使用
-
-#### 单个网站爬取
-
-```bash
-# 爬取单个网站（默认模式：静态+动态）
-python main.py -u https://example.com
-
-# 仅静态爬取
-python main.py -u https://example.com --mode static
-
-# 仅动态爬取
-python main.py -u https://example.com --mode dynamic
-
-# 自定义参数
-python main.py -u https://example.com -d 3 -w 5 -t 4 --playwright-tabs 6
-
-# 启用相似度检测和去重
-python main.py -u https://example.com --similarity --similarity-threshold 0.8
-```
-
-#### 批量网站爬取
-
-```bash
-# 从文件批量爬取网站
-python main.py -f urls.txt
-
-# 批量爬取，遇到错误继续处理下一个URL
-python main.py -f urls.txt --continue-on-error
-
-# 批量爬取，设置URL之间的延迟时间
-python main.py -f urls.txt --batch-delay 2 --continue-on-error
-
-# 批量爬取，自定义参数
-python main.py -f urls.txt -d 2 -t 4 --batch-delay 1 --continue-on-error --mode static
-
-# 批量爬取，启用相似度检测
-python main.py -f urls.txt --continue-on-error --similarity --similarity-threshold 0.8
-```
-
-#### URL文件格式
-
-创建一个文本文件（如 `urls.txt`），每行一个URL：
-
-```
-# 这是注释行，会被忽略
-https://example1.com
-https://example2.com
-https://example3.com
-
-# 空行也会被忽略
-https://example4.com
-```
-
-## 项目结构 (Go版本)
+## 项目结构
 
 ```
 JsFIndcrack/
@@ -313,7 +229,11 @@ JsFIndcrack/
 │   │   └── header_manager.go # HTTP头管理
 │   ├── crawlers/             # 爬取器实现
 │   │   ├── static.go         # 静态爬取(Colly)
-│   │   └── dynamic.go        # 动态爬取(Rod)
+│   │   ├── dynamic.go        # 动态爬取(Rod)
+│   │   ├── page_pool.go      # 标签页池管理
+│   │   ├── resource_monitor.go # 资源监控
+│   │   ├── url_extractor.go  # URL提取器
+│   │   └── url_queue.go      # URL队列
 │   ├── models/               # 数据模型
 │   │   ├── task.go           # 任务模型
 │   │   ├── file.go           # 文件模型
@@ -328,9 +248,8 @@ JsFIndcrack/
 │   ├── unit/                 # 单元测试
 │   ├── e2e/                  # 端到端测试
 │   └── benchmark/            # 性能测试
-├── scripts/
-│   ├── build.sh              # 交叉编译脚本
-│   └── release.sh            # 发布打包脚本
+├── configs/
+│   └── config.yaml           # 配置文件
 ├── go.mod                    # Go模块定义
 ├── go.sum                    # 依赖锁定
 ├── Makefile                  # 构建任务
@@ -339,59 +258,7 @@ JsFIndcrack/
 
 ---
 
-## 构建和开发 (Go版本)
-
-### 本地开发
-
-```bash
-# 安装依赖
-go mod download
-
-# 运行测试
-make test
-# 或
-go test ./...
-
-# 运行E2E测试
-./tests/e2e/single_url_test.sh
-./tests/e2e/batch_crawl_test.sh
-
-# 格式化代码
-gofmt -w .
-
-# 代码检查
-go vet ./...
-```
-
-### 交叉编译
-
-```bash
-# 构建所有平台
-./scripts/build.sh
-
-# 输出位于 dist/ 目录:
-# - jsfindcrack-linux-amd64
-# - jsfindcrack-darwin-amd64
-# - jsfindcrack-darwin-arm64
-# - jsfindcrack-windows-amd64.exe
-```
-
-### 创建发布包
-
-```bash
-# 生成包含文档的完整发布包
-./scripts/release.sh
-
-# 输出:
-# - dist/jsfindcrack-VERSION-linux-amd64-full.tar.gz
-# - dist/jsfindcrack-VERSION-darwin-amd64-full.tar.gz
-# - dist/jsfindcrack-VERSION-darwin-arm64-full.tar.gz
-# - dist/jsfindcrack-VERSION-windows-amd64-full.zip
-```
-
----
-
-## 使用示例 (Go版本)
+## 使用示例
 
 ### 场景1: 安全研究
 
@@ -448,7 +315,46 @@ fi
 
 ---
 
-## 性能基准 (Go版本)
+## 构建和开发
+
+### 本地开发
+
+```bash
+# 安装依赖
+go mod download
+
+# 运行测试
+make test
+# 或
+go test ./...
+
+# 运行E2E测试
+make test-e2e
+
+# 格式化代码
+go fmt ./...
+
+# 代码检查
+go vet ./...
+golangci-lint run
+```
+
+### 交叉编译
+
+```bash
+# 构建所有平台
+make build-all
+
+# 输出位于当前目录:
+# - jsfindcrack-linux-amd64
+# - jsfindcrack-darwin-amd64
+# - jsfindcrack-darwin-arm64
+# - jsfindcrack-windows-amd64.exe
+```
+
+---
+
+## 性能基准
 
 **测试环境**: macOS M1, 16GB RAM
 
@@ -460,282 +366,11 @@ fi
 | 批量10个URL | ~150 | static | 4 | 2分钟 | 200MB |
 | 批量100个URL | ~800 | static | 8 | 18分钟 | 600MB |
 
-**性能提升** (对比Python版本):
-- 批量爬取: 30% 更快
-- 内存占用: 40% 更低
-- 反混淆: 50% 更快
-- 启动时间: <1秒 (Python版本~2秒)
-
----
-
-## 命令行参数
-
-| 参数 | 简写 | 默认值 | 说明 |
-|------|------|--------|------|
-| `--url` | `-u` | 必需* | 目标网站URL（与--url-file互斥） |
-| `--url-file` | `-f` | 必需* | URL列表文件路径（与--url互斥） |
-| `--batch-delay` | - | 0 | 批量模式下URL之间的延迟时间(秒) |
-| `--continue-on-error` | - | False | 批量模式下遇到错误时继续处理下一个URL |
-| `--depth` | `-d` | 2 | 爬取深度 |
-| `--wait` | `-w` | 3 | 页面等待时间(秒) |
-| `--threads` | `-t` | 2 | 静态爬取并行线程数 |
-| `--playwright-tabs` | - | 4 | Playwright同时打开的标签页数量 |
-| `--headless` | - | True | Playwright无头模式运行 |
-| `--no-headless` | - | - | Playwright有头模式运行 |
-| `--mode` | - | all | 爬取模式: static/dynamic/all |
-| `--resume` | `-r` | - | 从检查点恢复 |
-| `--similarity` | - | True | 启用智能相似度检测和去重 |
-| `--similarity-threshold` | - | 0.8 | 相似度阈值(0.0-1.0) |
-| `--similarity-workers` | - | CPU核心数 | 相似度分析并行工作线程数 |
-
-*注：`--url` 和 `--url-file` 参数互斥，必须指定其中一个
-
-## 接口
-
-### 基本用法
-
-```python
-from src.core.js_crawler import JSCrawler
-
-# 创建爬虫实例
-crawler = JSCrawler("https://example.com")
-
-# 执行爬取
-result = crawler.crawl()
-
-# 查看结果
-print(f"静态JS文件: {result['static']['downloaded']} 个")
-print(f"动态JS文件: {result['dynamic']['downloaded']} 个")
-print(f"Source Map文件: {result['static']['map_files']} 个")
-print(f"反混淆文件: {result['deobfuscation']['processed_files']} 个")
-```
-
-### 高级配置
-
-```python
-# 自定义参数爬取
-result = crawler.crawl(
-    depth=3,                    # 爬取深度
-    wait_time=5,               # 页面等待时间
-    max_workers=4,             # 并行线程数
-    playwright_tabs=6,         # Playwright标签页数
-    headless=True,             # 无头模式
-    mode='all',                # 爬取模式
-    resume=False,              # 是否恢复
-    similarity_enabled=True,   # 启用相似度检测
-    similarity_threshold=0.8   # 相似度阈值
-)
-```
-
-### 批量处理
-
-#### 使用BatchJSCrawler类
-
-```python
-from src.core.js_crawler import BatchJSCrawler
-
-# 从文件加载URL列表
-urls_file = "urls.txt"
-batch_crawler = BatchJSCrawler()
-
-# 执行批量爬取
-result = batch_crawler.crawl_batch(
-    urls_file=urls_file,
-    depth=2,
-    wait_time=3,
-    max_workers=2,
-    playwright_tabs=4,
-    headless=True,
-    mode='all',
-    batch_delay=1,           # URL之间延迟1秒
-    continue_on_error=True   # 遇到错误继续处理
-)
-
-# 查看批量处理结果
-print(f"总URL数量: {result['total_urls']}")
-print(f"成功处理: {result['successful_urls']}")
-print(f"失败数量: {result['failed_urls']}")
-print(f"总文件数: {result['total_files']}")
-```
-
-#### 手动批量处理
-
-```python
-from src.core.js_crawler import JSCrawler
-
-urls = [
-    "https://site1.com",
-    "https://site2.com", 
-    "https://site3.com"
-]
-
-results = []
-for i, url in enumerate(urls, 1):
-    print(f"处理第 {i}/{len(urls)} 个URL: {url}")
-    
-    try:
-        crawler = JSCrawler(url)
-        result = crawler.crawl()
-        results.append({
-            'url': url,
-            'success': True,
-            'total_files': result['total_files']
-        })
-        print(f"✅ {url}: 完成，共处理 {result['total_files']} 个文件")
-    except Exception as e:
-        results.append({
-            'url': url,
-            'success': False,
-            'error': str(e)
-        })
-        print(f"❌ {url}: 失败 - {e}")
-    
-    # 添加延迟
-    import time
-    time.sleep(1)
-
-# 统计结果
-successful = sum(1 for r in results if r['success'])
-total_files = sum(r.get('total_files', 0) for r in results if r['success'])
-print(f"\n批量处理完成: {successful}/{len(urls)} 成功，共获得 {total_files} 个文件")
-```
-
-## 支持的文件类型
-
-### JavaScript文件
-- `.js` - 标准JavaScript文件
-- `.mjs` - ES6模块文件
-- `.jsx` - React JSX文件
-
-### Source Map文件
-- `.map` - 标准Source Map文件
-- `.js.map` - JavaScript Source Map文件
-
-## 工作流程
-
-1. **静态爬取阶段**
-   - 解析HTML页面，提取script标签
-   - 发现JavaScript和Source Map文件链接
-   - 多线程并行下载文件
-   - 自动去重和文件验证
-
-2. **动态爬取阶段**
-   - 启动浏览器（Selenium/Playwright）
-   - 监控网络请求，捕获动态加载的JS文件
-   - 执行页面交互，触发更多资源加载
-   - 跨模式去重，避免重复下载
-
-3. **相似度检测与去重**
-   - 基于文件内容计算相似度
-   - 智能识别重复和相似文件
-   - 生成去重报告和统计信息
-   - 支持并行处理提升效率
-
-4. **反混淆处理**
-   - 自动检测混淆的JavaScript文件
-   - 使用webcrack工具进行反混淆
-   - 保持原始文件结构和命名
-
-5. **报告生成**
-   - 生成详细的爬取统计报告
-   - 记录成功/失败的文件信息
-   - 提供文件大小和类型统计
-   - 分类日志管理（错误日志、调试日志）
-
-## 输出目录结构
-
-```
-output/
-└── example.com/
-    ├── encode/               # 原始下载文件
-    │   ├── js/              # JavaScript文件
-    │   └── maps/            # Source Map文件
-    ├── decode/              # 反混淆后的文件
-    ├── checkpoints/         # 检查点文件
-    │   └── crawler_checkpoint.json
-    ├── similarity_analysis_[timestamp]/ # 相似度分析结果
-    │   ├── duplicate_groups.json
-    │   ├── similarity_matrix.json
-    │   └── deduplication_report.json
-    ├── crawl_report.json    # 爬取报告
-    ├── crawl_summary.json   # 爬取摘要
-    ├── success_files.json   # 成功文件列表
-    └── failed_files.json    # 失败文件列表
-
-logs/                        # 全局日志目录
-├── js_crawler.log          # 主日志文件
-└── js_crawler_error.log    # 错误日志文件
-```
-
-## 配置说明
-
-主要配置项位于 `src/core/config.py`：
-
-```python
-# 网络配置
-REQUEST_TIMEOUT = 30          # 请求超时时间
-MAX_RETRIES = 3              # 最大重试次数
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 最大文件大小(50MB)
-
-# 浏览器配置
-BROWSER_ENGINE = "playwright"  # 浏览器引擎
-USE_EMBEDDED_BROWSER = True   # 使用内嵌浏览器
-
-# 文件类型配置
-SUPPORTED_JS_EXTENSIONS = ['.js', '.mjs', '.jsx']
-SUPPORTED_MAP_EXTENSIONS = ['.map', '.js.map']
-
-# 相似度检测配置
-SIMILARITY_THRESHOLD = 0.8    # 默认相似度阈值
-MIN_FILE_SIZE_FOR_SIMILARITY = 1024  # 最小文件大小
-```
-
-### 调试模式
-
-```bash
-# 启用详细日志
-export LOG_LEVEL=DEBUG
-python main.py -u https://example.com
-
-# 查看日志文件
-tail -f logs/js_crawler.log
-tail -f logs/js_crawler_error.log
-```
-
-## 性能优化
-
-- **并行处理**: 支持多线程下载和相似度分析
-- **智能去重**: 避免重复下载相同文件
-- **断点续爬**: 支持中断恢复，节省时间
-- **内存优化**: 大文件流式处理，降低内存占用
-- **缓存机制**: 文件哈希缓存，提升去重效率
-
-
----
-
-## Python版本参考
-
-原Python版本代码仍在仓库中保留(用于对比和迁移参考)。如需使用Python版本,请参考:
-
-```bash
-# 查看Python版本分支
-git checkout python-legacy
-
-# 安装Python版本
-pip install -r requirements.txt
-playwright install
-
-# 运行Python版本
-python main.py -u https://example.com
-```
-
-**注意**: 新功能和优化仅在Go版本中提供,推荐使用Go版本。
-
 ---
 
 ## 故障排查
 
-### Go版本常见问题
+### 常见问题
 
 **Q1: macOS提示"无法验证开发者"**
 ```bash
@@ -768,7 +403,7 @@ go build ./cmd/jsfindcrack
 
 ---
 
-## 技术栈 (Go版本)
+## 技术栈
 
 - **语言**: Go 1.21+
 - **静态爬取**: [Colly](https://github.com/gocolly/colly) - 高效HTTP爬取
@@ -801,13 +436,19 @@ go build ./cmd/jsfindcrack
 
 ## 开发路线图
 
-### v2.1 (计划中)
+### v2.1 (进行中)
+- [x] 自适应标签页池管理
+- [x] 系统资源监控
+- [x] URL优先级队列
+- [x] GitHub Actions自动发布
+
+### v2.2 (计划中)
 - [ ] Web UI界面
 - [ ] 实时进度WebSocket推送
 - [ ] 插件系统
 - [ ] 更多反混淆引擎支持
 
-### v2.2 (计划中)
+### v2.3 (计划中)
 - [ ] 分布式爬取
 - [ ] Redis缓存支持
 - [ ] Docker镜像
@@ -823,16 +464,11 @@ go build ./cmd/jsfindcrack
 
 ## 致谢
 
-### Go版本
 - [Colly](https://github.com/gocolly/colly) - 静态爬取引擎
 - [Rod](https://github.com/go-rod/rod) - 浏览器自动化
 - [Cobra](https://github.com/spf13/cobra) - CLI框架
 - [Zerolog](https://github.com/rs/zerolog) - 日志库
 - [webcrack](https://github.com/j4k0xb/webcrack) - JavaScript反混淆
-
-### Python版本 (Legacy)
-- [Playwright](https://playwright.dev/) - 浏览器自动化
-- [BeautifulSoup](https://www.crummy.com/software/BeautifulSoup/) - HTML解析
 
 ---
 
@@ -846,4 +482,4 @@ go build ./cmd/jsfindcrack
 
 **如果这个项目对你有帮助,请给它一个星标!** ⭐
 
-**Go重写版v2.0 - 更快、更轻、更强大!** 🚀
+**更快、更轻、更强大!** 🚀
