@@ -7,8 +7,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/RecoveryAshes/JsFIndcrack/internal/models"
@@ -255,9 +258,9 @@ func (d *Deobfuscator) isObfuscated(code string) bool {
 
 	// 5. 检查常见混淆器特征
 	obfuscatorPatterns := []string{
-		`_0x[0-9a-f]+`,           // 常见混淆器变量名
-		`\['push'\]`,             // 数组方法字符串化
-		`\['length'\]`,           // 属性访问字符串化
+		`_0x[0-9a-f]+`,          // 常见混淆器变量名
+		`\['push'\]`,            // 数组方法字符串化
+		`\['length'\]`,          // 属性访问字符串化
 		`String\['fromCharCode`, // 字符串构造
 	}
 
@@ -275,31 +278,65 @@ func (d *Deobfuscator) generateDecodePath(jsFile *models.JSFile, outputDir strin
 	// 从encode/js路径转换到decode/js路径
 	// 例如: output/domain/encode/js/file.js -> output/domain/decode/js/file.js
 
-	filename := filepath.Base(jsFile.FilePath)
-	domain := filepath.Base(filepath.Dir(filepath.Dir(filepath.Dir(jsFile.FilePath))))
+	// 将FilePath中的/encode/js/替换为/decode/js/
+	decodePath := strings.Replace(jsFile.FilePath, "/encode/js/", "/decode/js/", 1)
+	// Windows路径兼容
+	decodePath = strings.Replace(decodePath, "\\encode\\js\\", "\\decode\\js\\", 1)
 
-	return filepath.Join(outputDir, domain, "decode", "js", filename)
+	return decodePath
 }
 
-// DeobfuscateAll 批量反混淆所有文件
+// DeobfuscateAll 批量反混淆所有文件(并发处理)
 func (d *Deobfuscator) DeobfuscateAll(jsFiles []*models.JSFile, outputDir string) (int, int, error) {
-	successCount := 0
-	failCount := 0
+	var successCount int32
+	var failCount int32
 
-	utils.Infof("🔧 开始批量反混淆: %d个文件", len(jsFiles))
-
-	for _, jsFile := range jsFiles {
-		if err := d.Deobfuscate(jsFile, outputDir); err != nil {
-			utils.Errorf("反混淆失败 [%s]: %v", jsFile.URL, err)
-			failCount++
-			continue
-		}
-
-		if jsFile.IsObfuscated {
-			successCount++
-		}
+	totalFiles := len(jsFiles)
+	if totalFiles == 0 {
+		utils.Infof("🔧 没有文件需要反混淆")
+		return 0, 0, nil
 	}
 
+	// 计算并发worker数量 = CPU核心数
+	maxWorkers := runtime.NumCPU()
+	utils.Infof("🔧 开始批量反混淆: %d个文件, 并发数: %d", totalFiles, maxWorkers)
+
+	// 创建任务channel和WaitGroup
+	jobs := make(chan *models.JSFile, totalFiles)
+	var wg sync.WaitGroup
+
+	// 启动worker goroutines
+	for i := 0; i < maxWorkers; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+
+			// 从jobs channel消费任务
+			for jsFile := range jobs {
+				// 执行反混淆
+				if err := d.Deobfuscate(jsFile, outputDir); err != nil {
+					utils.Errorf("反混淆失败 [Worker #%d] [%s]: %v", workerID, jsFile.URL, err)
+					atomic.AddInt32(&failCount, 1)
+					continue
+				}
+
+				// 如果文件被检测为混淆,计数成功
+				if jsFile.IsObfuscated {
+					atomic.AddInt32(&successCount, 1)
+				}
+			}
+		}(i)
+	}
+
+	// 将所有文件分发到jobs channel
+	for _, jsFile := range jsFiles {
+		jobs <- jsFile
+	}
+	close(jobs) // 关闭channel,通知workers没有更多任务
+
+	// 等待所有worker完成
+	wg.Wait()
+
 	utils.Infof("✅ 反混淆完成: 成功 %d, 失败 %d", successCount, failCount)
-	return successCount, failCount, nil
+	return int(successCount), int(failCount), nil
 }
