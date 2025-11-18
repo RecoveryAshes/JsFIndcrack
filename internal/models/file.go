@@ -36,13 +36,13 @@ type JSFile struct {
 	Depth     int       `json:"depth"`      // 爬取深度
 
 	// 状态标记
-	IsObfuscated   bool `json:"is_obfuscated"`    // 是否混淆
-	IsDeobfuscated bool `json:"is_deobfuscated"`  // 是否已反混淆
-	IsDuplicate    bool `json:"is_duplicate"`     // 是否重复
+	IsObfuscated   bool `json:"is_obfuscated"`   // 是否混淆
+	IsDeobfuscated bool `json:"is_deobfuscated"` // 是否已反混淆
+	IsDuplicate    bool `json:"is_duplicate"`    // 是否重复
 
 	// 时间戳
-	DownloadedAt time.Time  `json:"downloaded_at"`            // 下载时间
-	ProcessedAt  *time.Time `json:"processed_at,omitempty"`   // 处理时间
+	DownloadedAt time.Time  `json:"downloaded_at"`          // 下载时间
+	ProcessedAt  *time.Time `json:"processed_at,omitempty"` // 处理时间
 
 	// 关联信息
 	MapFileURL string `json:"map_file_url,omitempty"` // 关联的Source Map URL

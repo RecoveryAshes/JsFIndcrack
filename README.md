@@ -3,6 +3,7 @@
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20|%20macOS%20|%20Windows-lightgrey)](https://github.com/RecoveryAshes/JsFIndcrack)
+[![GitHub Release](https://img.shields.io/github/v/release/RecoveryAshes/JsFIndcrack)](https://github.com/RecoveryAshes/JsFIndcrack/releases)
 
 一个功能强大的JavaScript文件爬取和反混淆工具，**已使用Go语言完全重写**，提供更快的性能、更低的内存占用和单一可执行文件部署。
 
@@ -51,32 +52,42 @@
 
 ### 选项1: 下载预编译二进制文件 (推荐)
 
-从[Releases页面](https://github.com/RecoveryAshes/JsFIndcrack/releases)下载对应平台的二进制文件:
+访问[Releases页面](https://github.com/RecoveryAshes/JsFIndcrack/releases)下载最新版本的预编译二进制文件。
+
+根据您的操作系统选择对应的文件:
+- Linux (amd64): `jsfindcrack-{VERSION}-linux-amd64.tar.gz`
+- macOS (Intel): `jsfindcrack-{VERSION}-darwin-amd64.tar.gz`
+- macOS (Apple Silicon): `jsfindcrack-{VERSION}-darwin-arm64.tar.gz`
+- Windows (amd64): `jsfindcrack-{VERSION}-windows-amd64.zip`
+
+下载并解压后即可使用:
 
 ```bash
 # Linux
-wget https://github.com/RecoveryAshes/JsFIndcrack/releases/download/v2.0/jsfindcrack-linux-amd64.tar.gz
-tar -xzf jsfindcrack-linux-amd64.tar.gz
+wget https://github.com/RecoveryAshes/JsFIndcrack/releases/download/{VERSION}/jsfindcrack-{VERSION}-linux-amd64.tar.gz
+tar -xzf jsfindcrack-{VERSION}-linux-amd64.tar.gz
 chmod +x jsfindcrack
 ./jsfindcrack --help
 
 # macOS (Intel)
-curl -LO https://github.com/RecoveryAshes/JsFIndcrack/releases/download/v2.0/jsfindcrack-darwin-amd64.tar.gz
-tar -xzf jsfindcrack-darwin-amd64.tar.gz
+curl -LO https://github.com/RecoveryAshes/JsFIndcrack/releases/download/{VERSION}/jsfindcrack-{VERSION}-darwin-amd64.tar.gz
+tar -xzf jsfindcrack-{VERSION}-darwin-amd64.tar.gz
 chmod +x jsfindcrack
 ./jsfindcrack --help
 
 # macOS (Apple Silicon)
-curl -LO https://github.com/RecoveryAshes/JsFIndcrack/releases/download/v2.0/jsfindcrack-darwin-arm64.tar.gz
-tar -xzf jsfindcrack-darwin-arm64.tar.gz
+curl -LO https://github.com/RecoveryAshes/JsFIndcrack/releases/download/{VERSION}/jsfindcrack-{VERSION}-darwin-arm64.tar.gz
+tar -xzf jsfindcrack-{VERSION}-darwin-arm64.tar.gz
 chmod +x jsfindcrack
 ./jsfindcrack --help
 
 # Windows (PowerShell)
-Invoke-WebRequest -Uri "https://github.com/RecoveryAshes/JsFIndcrack/releases/download/v2.0/jsfindcrack-windows-amd64.zip" -OutFile jsfindcrack.zip
+Invoke-WebRequest -Uri "https://github.com/RecoveryAshes/JsFIndcrack/releases/download/{VERSION}/jsfindcrack-{VERSION}-windows-amd64.zip" -OutFile jsfindcrack.zip
 Expand-Archive jsfindcrack.zip
 .\jsfindcrack\jsfindcrack.exe --help
 ```
+
+**注意**: 将`{VERSION}`替换为实际版本号，如`v2.0.0`
 
 ### 选项2: 从源码构建
 

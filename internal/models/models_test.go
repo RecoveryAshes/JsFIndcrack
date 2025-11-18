@@ -170,8 +170,8 @@ func TestJSFile_ValidateSize(t *testing.T) {
 		size    int64
 		wantErr bool
 	}{
-		{"正常大小", 1024 * 1024, false},       // 1MB
-		{"最大大小", MaxFileSize, false},        // 50MB
+		{"正常大小", 1024 * 1024, false}, // 1MB
+		{"最大大小", MaxFileSize, false}, // 50MB
 		{"零大小", 0, true},
 		{"负数大小", -1, true},
 		{"超过最大", MaxFileSize + 1, true},

@@ -1,0 +1,9 @@
+# 被移除跟踪的文件列表 (Tue Nov 18 17:36:30 CST 2025)
+# 注：这些目录/文件本来就没有被Git跟踪
+# .specify/
+# CLAUDE.md
+# specs/
+# tests/
+# scripts/
+# 
+# 如需回滚：git add [文件名]

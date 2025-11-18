@@ -14,11 +14,11 @@ type Checkpoint struct {
 	TargetURL string `json:"target_url"` // 目标URL
 
 	// 进度信息
-	VisitedURLs     []string `json:"visited_urls"`      // 已访问URL列表
-	DownloadedFiles []string `json:"downloaded_files"`  // 已下载文件URL列表
-	FailedURLs      []string `json:"failed_urls"`       // 失败URL列表
-	PendingURLs     []string `json:"pending_urls"`      // 待处理URL列表
-	CurrentDepth    int      `json:"current_depth"`     // 当前深度
+	VisitedURLs     []string `json:"visited_urls"`     // 已访问URL列表
+	DownloadedFiles []string `json:"downloaded_files"` // 已下载文件URL列表
+	FailedURLs      []string `json:"failed_urls"`      // 失败URL列表
+	PendingURLs     []string `json:"pending_urls"`     // 待处理URL列表
+	CurrentDepth    int      `json:"current_depth"`    // 当前深度
 
 	// 统计信息
 	Stats TaskStats `json:"stats"` // 当前统计

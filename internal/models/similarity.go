@@ -18,16 +18,16 @@ type SimilarityGroup struct {
 	MaxSimilarity float64 `json:"max_similarity"` // 最大相似度
 
 	// 去重建议
-	DuplicateFiles []string `json:"duplicate_files"` // 建议删除的重复文件
+	DuplicateFiles []string `json:"duplicate_files"`  // 建议删除的重复文件
 	TotalSavedSize int64    `json:"total_saved_size"` // 去重后节省空间(字节)
 }
 
 // SimilarityMember 相似度组成员
 type SimilarityMember struct {
-	FileURL    string  `json:"file_url"`    // 文件URL
-	FilePath   string  `json:"file_path"`   // 本地路径
-	FileSize   int64   `json:"file_size"`   // 文件大小
-	Similarity float64 `json:"similarity"`  // 与代表文件的相似度
+	FileURL    string  `json:"file_url"`   // 文件URL
+	FilePath   string  `json:"file_path"`  // 本地路径
+	FileSize   int64   `json:"file_size"`  // 文件大小
+	Similarity float64 `json:"similarity"` // 与代表文件的相似度
 }
 
 // SimilarityMatrix 相似度矩阵

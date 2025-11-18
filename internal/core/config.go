@@ -15,13 +15,14 @@ type Config struct {
 	Logging    LoggingConfig      `mapstructure:"logging"`
 	Output     OutputConfig       `mapstructure:"output"`
 	Similarity SimilarityConfig   `mapstructure:"similarity"`
+	Resource   ResourceConfig     `mapstructure:"resource"`
 }
 
 // LoggingConfig 日志配置
 type LoggingConfig struct {
-	Level   string          `mapstructure:"level"`
-	LogDir  string          `mapstructure:"log_dir"`
-	Rotation RotationConfig  `mapstructure:"rotation"`
+	Level    string         `mapstructure:"level"`
+	LogDir   string         `mapstructure:"log_dir"`
+	Rotation RotationConfig `mapstructure:"rotation"`
 }
 
 // RotationConfig 日志轮转配置
@@ -43,6 +44,32 @@ type SimilarityConfig struct {
 	Enabled   bool    `mapstructure:"enabled"`
 	Threshold float64 `mapstructure:"threshold"`
 	Workers   int     `mapstructure:"workers"`
+}
+
+// ResourceConfig 资源优化配置
+type ResourceConfig struct {
+	SafetyReserveMemory int `mapstructure:"safety_reserve_memory"` // 安全保留内存(MB)
+	SafetyThreshold     int `mapstructure:"safety_threshold"`      // 安全阈值(MB)
+	CPULoadThreshold    int `mapstructure:"cpu_load_threshold"`    // CPU负载阈值(%)
+	MaxTabsLimit        int `mapstructure:"max_tabs_limit"`        // 绝对最大标签页数
+}
+
+// Validate 验证资源配置
+// 确保配置值在合理范围内
+func (r *ResourceConfig) Validate() error {
+	if r.SafetyReserveMemory < 512 {
+		return fmt.Errorf("安全保留内存必须 >= 512MB, 当前值: %dMB", r.SafetyReserveMemory)
+	}
+	if r.SafetyThreshold < 200 {
+		return fmt.Errorf("安全阈值必须 >= 200MB, 当前值: %dMB", r.SafetyThreshold)
+	}
+	if r.CPULoadThreshold < 50 || r.CPULoadThreshold > 999 {
+		return fmt.Errorf("CPU负载阈值必须在50-999之间, 当前值: %d%%", r.CPULoadThreshold)
+	}
+	if r.MaxTabsLimit < 1 || r.MaxTabsLimit > 32 {
+		return fmt.Errorf("最大标签页数必须在1-32之间, 当前值: %d", r.MaxTabsLimit)
+	}
+	return nil
 }
 
 // LoadConfig 加载配置文件
@@ -86,6 +113,11 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("解析配置文件失败: %w", err)
 	}
 
+	// 验证资源配置
+	if err := config.Resource.Validate(); err != nil {
+		return nil, fmt.Errorf("资源配置验证失败: %w", err)
+	}
+
 	return &config, nil
 }
 
@@ -101,6 +133,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("crawl.similarity_enabled", true)
 	v.SetDefault("crawl.similarity_threshold", 0.8)
 	v.SetDefault("crawl.similarity_workers", 8)
+	v.SetDefault("crawl.allow_cross_domain", true)
 
 	// 日志配置默认值
 	v.SetDefault("logging.level", "info")
@@ -118,11 +151,23 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("similarity.enabled", true)
 	v.SetDefault("similarity.threshold", 0.8)
 	v.SetDefault("similarity.workers", 8)
+
+	// 资源优化配置默认值
+	v.SetDefault("resource.safety_reserve_memory", 1024) // 1GB
+	v.SetDefault("resource.safety_threshold", 500)       // 500MB
+	v.SetDefault("resource.cpu_load_threshold", 80)      // 80%
+	v.SetDefault("resource.max_tabs_limit", 16)          // 16个标签页
 }
 
-// GetCrawlConfig 从配置中提取爬取配置
+// GetCrawlConfig 从配置中提取爬取配置(合并Resource配置)
 func (c *Config) GetCrawlConfig() models.CrawlConfig {
-	return c.Crawl
+	crawlConfig := c.Crawl
+	// 合并Resource配置到CrawlConfig
+	crawlConfig.SafetyReserveMemory = c.Resource.SafetyReserveMemory
+	crawlConfig.SafetyThreshold = c.Resource.SafetyThreshold
+	crawlConfig.CPULoadThreshold = c.Resource.CPULoadThreshold
+	crawlConfig.MaxTabsLimit = c.Resource.MaxTabsLimit
+	return crawlConfig
 }
 
 // MergeCLIFlags 合并命令行参数到配置

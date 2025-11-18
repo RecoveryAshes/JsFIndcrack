@@ -38,19 +38,30 @@ type TaskStats struct {
 	TotalSize         int64   `json:"total_size"`         // 总大小(字节)
 	Duration          float64 `json:"duration"`           // 总耗时(秒)
 	VisitedURLs       int     `json:"visited_urls"`       // 已访问URL数
+
+	// 本次修复新增 (Feature 010-fix-domain-crawl-bugs)
+	FakeHTTPErrors  int `json:"fake_http_errors"` // 假404/403检测到的次数(HTTP错误但内容有效)
+	BrowserRestarts int `json:"browser_restarts"` // 浏览器重启次数
 }
 
 // CrawlConfig 爬取配置
 type CrawlConfig struct {
-	Depth               int     `json:"depth"`                // 爬取深度 (默认:2)
-	WaitTime            int     `json:"wait_time"`            // 页面等待时间(秒) (默认:3)
-	MaxWorkers          int     `json:"max_workers"`          // 静态爬取并发线程数 (默认:2)
-	PlaywrightTabs      int     `json:"playwright_tabs"`      // Playwright标签页数量 (默认:4)
-	Headless            bool    `json:"headless"`             // 无头模式 (默认:true)
-	Resume              bool    `json:"resume"`               // 是否从检查点恢复
-	SimilarityEnabled   bool    `json:"similarity_enabled"`   // 启用相似度检测 (默认:true)
-	SimilarityThreshold float64 `json:"similarity_threshold"` // 相似度阈值 (默认:0.8)
-	SimilarityWorkers   int     `json:"similarity_workers"`   // 相似度分析并发数
+	Depth               int     `json:"depth" yaml:"depth" mapstructure:"depth"`                                              // 爬取深度 (默认:2)
+	WaitTime            int     `json:"wait_time" yaml:"wait_time" mapstructure:"wait_time"`                                  // 页面等待时间(秒) (默认:3)
+	MaxWorkers          int     `json:"max_workers" yaml:"max_workers" mapstructure:"max_workers"`                            // 静态爬取并发线程数 (默认:2)
+	PlaywrightTabs      int     `json:"playwright_tabs" yaml:"playwright_tabs" mapstructure:"playwright_tabs"`                // Playwright标签页数量 (默认:4)
+	Headless            bool    `json:"headless" yaml:"headless" mapstructure:"headless"`                                     // 无头模式 (默认:true)
+	Resume              bool    `json:"resume" yaml:"resume" mapstructure:"resume"`                                           // 是否从检查点恢复
+	SimilarityEnabled   bool    `json:"similarity_enabled" yaml:"similarity_enabled" mapstructure:"similarity_enabled"`       // 启用相似度检测 (默认:true)
+	SimilarityThreshold float64 `json:"similarity_threshold" yaml:"similarity_threshold" mapstructure:"similarity_threshold"` // 相似度阈值 (默认:0.8)
+	SimilarityWorkers   int     `json:"similarity_workers" yaml:"similarity_workers" mapstructure:"similarity_workers"`       // 相似度分析并发数
+	AllowCrossDomain    bool    `json:"allow_cross_domain" yaml:"allow_cross_domain" mapstructure:"allow_cross_domain"`       // 是否允许跨域爬取 (默认:true)
+
+	// 资源优化配置
+	SafetyReserveMemory int `json:"safety_reserve_memory" yaml:"safety_reserve_memory" mapstructure:"safety_reserve_memory"` // 安全保留内存(MB)
+	SafetyThreshold     int `json:"safety_threshold" yaml:"safety_threshold" mapstructure:"safety_threshold"`                // 安全阈值(MB)
+	CPULoadThreshold    int `json:"cpu_load_threshold" yaml:"cpu_load_threshold" mapstructure:"cpu_load_threshold"`          // CPU负载阈值(%)
+	MaxTabsLimit        int `json:"max_tabs_limit" yaml:"max_tabs_limit" mapstructure:"max_tabs_limit"`                      // 绝对最大标签页数
 }
 
 // Validate 验证配置
@@ -137,15 +148,15 @@ func (t *CrawlTask) FromJSON(data []byte) error {
 type BatchCrawlTask struct {
 	// 基本信息
 	ID          string     `json:"id"`
-	URLsFile    string     `json:"urls_file"`              // URL列表文件路径
+	URLsFile    string     `json:"urls_file"` // URL列表文件路径
 	CreatedAt   time.Time  `json:"created_at"`
 	StartedAt   *time.Time `json:"started_at,omitempty"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
 
 	// 配置
-	Config          CrawlConfig `json:"config"`             // 爬取配置
-	BatchDelay      int         `json:"batch_delay"`        // URL之间延迟(秒)
-	ContinueOnError bool        `json:"continue_on_error"`  // 遇到错误继续
+	Config          CrawlConfig `json:"config"`            // 爬取配置
+	BatchDelay      int         `json:"batch_delay"`       // URL之间延迟(秒)
+	ContinueOnError bool        `json:"continue_on_error"` // 遇到错误继续
 
 	// 状态
 	Status TaskStatus `json:"status"`

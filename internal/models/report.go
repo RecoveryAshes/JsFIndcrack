@@ -62,8 +62,8 @@ type SimilarityAnalysisResult struct {
 	DuplicateGroups  []SimilarityGroup `json:"duplicate_groups"`
 	UniqueFiles      int               `json:"unique_files"`
 	DuplicateFiles   int               `json:"duplicate_files"`
-	SpaceSaved       int64             `json:"space_saved"`        // 字节
-	AnalysisDuration float64           `json:"analysis_duration"`  // 秒
+	SpaceSaved       int64             `json:"space_saved"`       // 字节
+	AnalysisDuration float64           `json:"analysis_duration"` // 秒
 }
 
 // ToJSON 序列化为JSON

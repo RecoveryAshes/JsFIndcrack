@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/RecoveryAshes/JsFIndcrack/internal/core"
 	"github.com/RecoveryAshes/JsFIndcrack/internal/models"
@@ -104,6 +106,22 @@ HTTP头部配置示例:
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// 设置信号处理(Ctrl+C优雅退出)
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+		go func() {
+			sig := <-sigChan
+			utils.Warnf("\n收到中断信号: %v, 正在优雅关闭...", sig)
+			os.Exit(0)
+		}()
+
+		// 重新加载配置(从PersistentPreRunE中获取)
+		appConfig, err := core.LoadConfig(configFile)
+		if err != nil {
+			return fmt.Errorf("加载配置失败: %w", err)
+		}
+
 		// 创建HTTP头部管理器
 		headerManager, err := core.NewHeaderManager(configFile, headers)
 		if err != nil {
@@ -158,6 +176,12 @@ HTTP头部配置示例:
 			Resume:              resume,
 			SimilarityEnabled:   similarityEnabled,
 			SimilarityThreshold: similarityThreshold,
+			AllowCrossDomain:    appConfig.Crawl.AllowCrossDomain, // 从配置文件加载
+			// 资源配置
+			SafetyReserveMemory: appConfig.Resource.SafetyReserveMemory,
+			SafetyThreshold:     appConfig.Resource.SafetyThreshold,
+			CPULoadThreshold:    appConfig.Resource.CPULoadThreshold,
+			MaxTabsLimit:        appConfig.Resource.MaxTabsLimit,
 		}
 
 		// 检查是否为批量处理模式
