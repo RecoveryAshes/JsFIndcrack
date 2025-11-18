@@ -71,7 +71,6 @@ type DynamicCrawler struct {
 
 	// Worker活跃计数器(用于检测所有worker空闲)
 	activeWorkers int32 // 使用atomic操作
-	workersMu     sync.Mutex
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -540,113 +539,6 @@ func (dc *DynamicCrawler) crawlPage(pageURL string, depth int) (err error) {
 	return nil
 }
 
-// downloadJSFile 下载并保存JavaScript文件
-func (dc *DynamicCrawler) downloadJSFile(fileURL string, content []byte, contentType string) error {
-	dc.mu.Lock()
-	defer dc.mu.Unlock()
-
-	// 检查是否已下载
-	if _, exists := dc.jsFiles[fileURL]; exists {
-		utils.Debugf("文件已存在,跳过: %s", fileURL)
-		return nil
-	}
-
-	// 计算文件哈希
-	hash := fmt.Sprintf("%x", sha256.Sum256(content))
-
-	// 先检查全局哈希表(跨爬取器去重)
-	if dc.globalFileHashes != nil && dc.globalMu != nil {
-		dc.globalMu.RLock()
-		if existingURL, exists := dc.globalFileHashes[hash]; exists {
-			dc.globalMu.RUnlock()
-			utils.Debugf("发现全局重复文件(哈希相同): %s (与 %s 相同)", fileURL, existingURL)
-
-			// 创建一个标记为重复的JSFile对象,但不保存到磁盘
-			jsFile := &models.JSFile{
-				ID:           uuid.New().String(),
-				URL:          fileURL,
-				FilePath:     "", // 不保存文件
-				Hash:         hash,
-				Size:         int64(len(content)),
-				Extension:    filepath.Ext(fileURL),
-				ContentType:  contentType,
-				SourceURL:    fileURL,
-				CrawlMode:    models.ModeDynamic,
-				Depth:        0,
-				IsObfuscated: false,
-				IsDuplicate:  true,
-				DownloadedAt: time.Now(),
-				HasMapFile:   false,
-			}
-			dc.jsFiles[fileURL] = jsFile
-			return nil
-		}
-		dc.globalMu.RUnlock()
-	}
-
-	// 检查本地哈希去重
-	for _, existingFile := range dc.jsFiles {
-		if existingFile.Hash == hash {
-			utils.Debugf("发现重复文件(哈希相同): %s", fileURL)
-			dc.jsFiles[fileURL] = existingFile
-			existingFile.IsDuplicate = true
-			return nil
-		}
-	}
-
-	// 生成文件路径
-	filePath, err := dc.generateFilePath(fileURL, "encode/js")
-	if err != nil {
-		return fmt.Errorf("生成文件路径失败: %w", err)
-	}
-
-	// 确保目录存在
-	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
-		return fmt.Errorf("创建目录失败: %w", err)
-	}
-
-	// 写入文件
-	if err := os.WriteFile(filePath, content, 0644); err != nil {
-		return fmt.Errorf("写入文件失败: %w", err)
-	}
-
-	// 创建JSFile对象
-	jsFile := &models.JSFile{
-		ID:           uuid.New().String(),
-		URL:          fileURL,
-		FilePath:     filePath,
-		Hash:         hash,
-		Size:         int64(len(content)),
-		Extension:    filepath.Ext(fileURL),
-		ContentType:  contentType,
-		SourceURL:    fileURL,
-		CrawlMode:    models.ModeDynamic,
-		Depth:        0, // TODO: 跟踪实际深度
-		IsObfuscated: false,
-		DownloadedAt: time.Now(),
-		HasMapFile:   false,
-	}
-
-	dc.jsFiles[fileURL] = jsFile
-	dc.stats.DynamicFiles++
-	dc.stats.TotalFiles++
-	dc.stats.TotalSize += int64(len(content))
-
-	// 添加到全局哈希表
-	if dc.globalFileHashes != nil && dc.globalMu != nil {
-		dc.globalMu.Lock()
-		dc.globalFileHashes[hash] = fileURL
-		dc.globalMu.Unlock()
-	}
-
-	utils.Infof("📥 下载成功: %s (%d bytes) - %s", filepath.Base(filePath), len(content), fileURL)
-
-	// 检查是否有Source Map
-	dc.checkAndDownloadSourceMap(fileURL, content)
-
-	return nil
-}
-
 // downloadJSFileWithPageID 下载JS文件并保存(带页面ID显示)
 func (dc *DynamicCrawler) downloadJSFileWithPageID(fileURL string, content []byte, contentType string, pageID int) error {
 	dc.mu.Lock()
@@ -860,28 +752,6 @@ func (dc *DynamicCrawler) downloadSourceMapFile(mapURL string) {
 	dc.stats.MapFiles++
 
 	utils.Infof("📥 下载Source Map成功: %s (%d bytes)", filepath.Base(filePath), len(content))
-}
-
-// isJavaScriptURL 判断是否为JavaScript文件URL
-func (dc *DynamicCrawler) isJavaScriptURL(urlStr string) bool {
-	urlStr = strings.ToLower(urlStr)
-
-	// 检查扩展名
-	for _, ext := range models.JSFileExtensions {
-		if strings.HasSuffix(urlStr, ext) {
-			return true
-		}
-	}
-
-	// 检查常见JS模式
-	if strings.Contains(urlStr, ".js?") ||
-		strings.Contains(urlStr, ".mjs?") ||
-		strings.Contains(urlStr, ".jsx?") {
-		return true
-	}
-
-	// 检查Content-Type (如果可用)
-	return false
 }
 
 // generateFilePath 生成本地文件路径
